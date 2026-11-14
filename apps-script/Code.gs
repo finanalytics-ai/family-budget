@@ -391,6 +391,7 @@ function doPost(e) {
       case 'add': data = withLock_(() => saveOp_(ss, user, p.op, null)); break;
       case 'update': data = withLock_(() => saveOp_(ss, user, p.op, p.op && p.op.id)); break;
       case 'delete': data = withLock_(() => deleteOp_(ss, p.id)); break;
+      case 'saveWallet': withLock_(() => saveWallet_(ss, p.wallet, p.oldName)); data = apiLoad_(ss, user); break;
       default: throw new Error('Неизвестное действие');
     }
     out = { ok: true, data: data };
@@ -531,6 +532,43 @@ function deleteOp_(ss, id) {
   if (!r) throw new Error('Операция не найдена');
   sh.deleteRow(r);
   return { id: id };
+}
+
+/** Создание / изменение кошелька. При переименовании обновляет Журнал и Доступ. */
+function saveWallet_(ss, w, oldName) {
+  if (!w) throw new Error('Нет данных кошелька');
+  const name = String(w.name || '').trim().slice(0, 60);
+  if (!name) throw new Error('Введите название кошелька');
+  const initial = Math.round((Number(w.initial) || 0) * 100) / 100;
+  const sh = ss.getSheetByName(SH.WAL);
+  const n = Math.max(sh.getLastRow() - 1, 0);
+  const names = n ? sh.getRange(2, 1, n, 1).getValues().map(r => String(r[0]).trim()) : [];
+  const oldIdx = oldName ? names.indexOf(String(oldName)) : -1;
+  if (oldName && oldIdx < 0) throw new Error('Кошелёк не найден: ' + oldName);
+  const dup = names.findIndex(x => x.toLowerCase() === name.toLowerCase());
+  if (dup >= 0 && dup !== oldIdx) throw new Error('Кошелёк «' + name + '» уже есть');
+  const row = [name, String(w.owner || ''), initial, String(w.icon || '💳'), w.active !== false];
+  const r = oldIdx >= 0 ? oldIdx + 2 : sh.getLastRow() + 1;
+  if (oldIdx < 0) sh.getRange(r, 5).insertCheckboxes();
+  sh.getRange(r, 1, 1, 5).setValues([row]);
+  sh.getRange(r, 3).setNumberFormat(MONEY);
+  if (oldIdx >= 0 && oldName !== name) {
+    renameInColumns_(ss.getSheetByName(SH.J), [5, 6], oldName, name);
+    renameInColumns_(ss.getSheetByName(SH.ACC), [5], oldName, name);
+  }
+  buildBalances_(ss);
+}
+
+function renameInColumns_(sh, cols, from, to) {
+  const n = sh.getLastRow() - 1;
+  if (n < 1) return;
+  cols.forEach(c => {
+    const rg = sh.getRange(2, c, n, 1);
+    const v = rg.getValues();
+    let changed = false;
+    v.forEach(r => { if (String(r[0]) === from) { r[0] = to; changed = true; } });
+    if (changed) rg.setValues(v);
+  });
 }
 
 /* ========================= СПРАВОЧНИКИ ========================= */
