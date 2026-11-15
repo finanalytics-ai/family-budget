@@ -12,7 +12,7 @@
 const DEFAULT_APP_URL = 'https://finanalytics-ai.github.io/family-budget/';
 
 // Версия кода — видна в меню и после «Обновить отчёты». Если видите другую — в Apps Script остался старый код.
-const SCRIPT_VERSION = '1.6 (16.11.2026)';
+const SCRIPT_VERSION = '1.7 (16.11.2026)';
 
 const SH = {
   J: 'Журнал', BAL: 'Остатки', PF: 'План-факт', ODDS: 'ОДДС', B: 'Бюджет',
@@ -215,6 +215,7 @@ function extendBudget() {
   const add = nextMonths_(addMonths_(last, 1), 12);
   const lastCol = sh.getLastColumn();
   const n = Math.max(sh.getLastRow() - 1, 0);
+  ensureGrid_(sh, Math.max(n + 1, 1), lastCol + 12);
   sh.getRange(1, lastCol + 1, 1, 12).setValues([add]).setNumberFormat('mmm yyyy');
   if (n) {
     const prev = sh.getRange(2, lastCol, n, 1).getValues();
@@ -244,7 +245,9 @@ function syncBudgetRows_(ss) {
   if (!add.length) return;
   const nM = Math.max(sh.getLastColumn() - 3, 0);
   const rows = add.map(a => [a.group, a.name, a.type].concat(new Array(nM).fill(0)));
-  sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  const r0 = sh.getLastRow() + 1;
+  ensureGrid_(sh, r0 + rows.length - 1, rows[0].length);
+  sh.getRange(r0, 1, rows.length, rows[0].length).setValues(rows);
 }
 
 function buildBalances_(ss) {
@@ -392,6 +395,7 @@ function buildOdds_(ss) {
     line.push(T);
     return line;
   });
+  ensureGrid_(sh, 3 + data.length, head.length);
   sh.getRange(3, 1, 1, head.length).setValues([head]);
   sh.getRange(3, c0, 1, n).setNumberFormat('mmm yyyy');
   styleHeader_(sh.getRange(3, 1, 1, head.length));
@@ -483,7 +487,8 @@ function doPost(e) {
     }
     out = { ok: true, data: data };
   } catch (err) {
-    out = { ok: false, error: String(err && err.message || err), code: err && err.code, id: err && err.tgId };
+    const msg = String(err && err.message || err);
+    out = { ok: false, error: (err && err.code) ? msg : msg + ' (сервер ' + SCRIPT_VERSION + ')', code: err && err.code, id: err && err.tgId, version: SCRIPT_VERSION };
   }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -606,6 +611,7 @@ function saveOp_(ss, user, op, id) {
   } else {
     id = newId_();
     rowIdx = sh.getLastRow() + 1;
+    ensureGrid_(sh, rowIdx, J_HEAD.length);
   }
   const author = id && rowIdx <= sh.getLastRow() ? (sh.getRange(rowIdx, 11).getValue() || user.name) : user.name;
   sh.getRange(rowIdx, 1, 1, J_HEAD.length).setValues([[id, date, type, amount, op.wallet, wallet2, group, article, cp, comment, author, new Date()]]);
@@ -645,7 +651,7 @@ function ensureMonthCol_(ss, key) {
   const later = Object.keys(map).filter(k => k > key).sort();
   let col;
   if (later.length) { col = map[later[0]]; sh.insertColumnBefore(col); }
-  else col = Math.max(sh.getLastColumn(), 3) + 1;
+  else { col = Math.max(sh.getLastColumn(), 3) + 1; ensureGrid_(sh, 1, col); }
   const y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7));
   const head = sh.getRange(1, col);
   head.setValue(new Date(y, m - 1, 1)).setNumberFormat('mmm yyyy');
@@ -793,6 +799,7 @@ function addCounterparty_(ss, name) {
  */
 function writeGrid_(sh, r0, c0, grid) {
   if (!grid.length) return;
+  ensureGrid_(sh, r0 + grid.length - 1, c0 + grid[0].length - 1);
   const isF = v => typeof v === 'string' && v.charAt(0) === '=';
   sh.getRange(r0, c0, grid.length, grid[0].length).setValues(grid.map(row => row.map(v => isF(v) ? '' : v)));
   let r1 = Infinity, r2 = -1, k1 = Infinity, k2 = -1;
@@ -855,8 +862,15 @@ function nextRow_(sh) {
   const a = sh.getRange(2, 1, n - 1, 1).getValues();
   let last = 1;
   for (let i = a.length - 1; i >= 0; i--) if (String(a[i][0]).trim() !== '') { last = i + 2; break; }
-  if (last + 1 > n) sh.insertRowsAfter(n, 10);
+  ensureGrid_(sh, last + 1, 1);
   return last + 1;
+}
+
+/** Добавляет строки/столбцы, если запись выходит за границы листа («за пределами диапазона»). */
+function ensureGrid_(sh, row, col) {
+  const mr = sh.getMaxRows(), mc = sh.getMaxColumns();
+  if (row > mr) sh.insertRowsAfter(mr, Math.max(row - mr, 100));
+  if (col > mc) sh.insertColumnsAfter(mc, col - mc);
 }
 
 /** Текст из приложения не должен превращаться в формулу. */
