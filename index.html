@@ -1055,6 +1055,7 @@ document.addEventListener('click', e => {
     case 'wicon': F.icon = v; F._upd(); haptic(); break;
     case 'wowner': F.owner = v; F._upd(); haptic(); break;
     case 'retry': start(); break;
+    case 'open-api': if (API){ if (inTg && tg.openLink) tg.openLink(API); else window.open(API, '_blank'); } break;
   }
 });
 document.addEventListener('keydown', e => { if (e.key==='Enter' && e.target.matches('.sheet input')) e.target.blur(); });
@@ -1086,6 +1087,11 @@ async function start(){
   try{ D = await api('load', {}); cache(); S.busy = false; fitStart(); render(); }
   catch(e){
     if (e.code==='forbidden') return screen('🔐','Нужен доступ', `Ваш Telegram ID: <code>${esc(e.tgId)}</code><br><br>Откройте Google Таблицу → лист «Доступ» и включите «Разрешён» в вашей строке.`, '<button class="btn" data-act="retry">Обновить</button>');
+    if (!D && (e instanceof TypeError || /fetch|network|json/i.test(e.message||''))) return screen('📡','Нет ответа от сервера',
+      `Приложение не получило ответ от скрипта Google. Проверьте в Apps Script → «Управление развертываниями»:<br><br>
+       • тип — <b>Веб-приложение</b>, «Выполнять как» — <b>Я</b><br>• «У кого есть доступ» — <b>Все</b> (не «Все, у кого есть аккаунт Google»)<br>• адрес заканчивается на <b>/exec</b><br><br>
+       Кнопка ниже откроет адрес сервера: должно появиться «Семейный бюджет API: OK».<br><span style="font-size:12px;word-break:break-all;opacity:.7">${esc((API||'').replace(/^https:\/\/script\.google\.com\/macros\/s\//,'…/').slice(0,60))}</span>`,
+      '<button class="btn" data-act="open-api">Проверить сервер</button><br><button class="btn" style="background:var(--glass2);color:var(--text);margin-top:10px" data-act="retry">Повторить</button>');
     if (!D) return screen('⚠️','Не удалось загрузить', esc(e.message||'Ошибка сети'), '<button class="btn" data-act="retry">Повторить</button>');
     hud('Нет связи — показаны сохранённые данные');
   }finally{ S.busy = false; setSync(false); }
