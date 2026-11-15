@@ -195,7 +195,7 @@ function buildBalances_(ss) {
   const tr = rows.length + 5;
   const total = ['Итого'].concat(['B', 'C', 'D', 'E', 'F', 'G'].map(c => rows.length ? `=SUM(${c}5:${c}${tr - 1})` : 0));
   const all = [head].concat(rows, [total]);
-  sh.getRange(4, 1, all.length, head.length).setValues(all);
+  writeGrid_(sh, 4, 1, all);
   styleHeader_(sh.getRange(4, 1, 1, head.length));
   sh.getRange(5, 2, all.length - 1, 6).setNumberFormat(MONEY);
   sh.getRange(tr, 1, 1, head.length).setFontWeight('bold').setBackground('#eef3fb');
@@ -258,7 +258,7 @@ function buildPlanFact_(ss) {
   });
   sh.getRange(4, 1, 1, 6).setValues([head]);
   styleHeader_(sh.getRange(4, 1, 1, 6));
-  sh.getRange(5, 1, data.length, 6).setValues(data);
+  writeGrid_(sh, 5, 1, data);
   sh.getRange(5, 3, data.length, 3).setNumberFormat(MONEY0);
   sh.getRange(5, 6, data.length, 1).setNumberFormat('0%');
   styleRows_(sh, rows, 6, 5);
@@ -323,7 +323,7 @@ function buildOdds_(ss) {
   sh.getRange(3, 1, 1, head.length).setValues([head]);
   sh.getRange(3, c0, 1, n).setNumberFormat('mmm yyyy');
   styleHeader_(sh.getRange(3, 1, 1, head.length));
-  sh.getRange(4, 1, data.length, head.length).setValues(data);
+  writeGrid_(sh, 4, 1, data);
   sh.getRange(4, c0, data.length, n + 1).setNumberFormat(MONEY0);
   styleRows_(sh, rows, head.length, 4);
   sh.getRange(4, cTot, data.length, 1).setFontWeight('bold');
@@ -512,8 +512,8 @@ function saveOp_(ss, user, op, id) {
     if (!a) throw new Error('Статья не найдена: ' + op.group + ' / ' + op.article);
     group = a.group; article = a.name;
   }
-  const cp = String(op.cp || '').trim().slice(0, 100);
-  const comment = String(op.comment || '').trim().slice(0, 500);
+  const cp = safeText_(String(op.cp || '').trim().slice(0, 100));
+  const comment = safeText_(String(op.comment || '').trim().slice(0, 500));
   const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
   const sh = ss.getSheetByName(SH.J);
   let rowIdx;
@@ -701,6 +701,36 @@ function addCounterparty_(ss, name) {
 }
 
 /* =========================== УТИЛИТЫ =========================== */
+
+/**
+ * Записывает таблицу, где часть ячеек — формулы. Формулы идут через setFormulas:
+ * этот метод всегда принимает английский синтаксис (запятые), а таблица сама показывает
+ * их в своей локали (в русской — с «;»). setValues же разбирает формулы по локали таблицы,
+ * из-за чего в русской локали получалась «Синтаксическая ошибка».
+ */
+function writeGrid_(sh, r0, c0, grid) {
+  if (!grid.length) return;
+  const isF = v => typeof v === 'string' && v.charAt(0) === '=';
+  sh.getRange(r0, c0, grid.length, grid[0].length).setValues(grid.map(row => row.map(v => isF(v) ? '' : v)));
+  let r1 = Infinity, r2 = -1, k1 = Infinity, k2 = -1;
+  grid.forEach((row, i) => row.forEach((v, j) => { if (isF(v)) { r1 = Math.min(r1, i); r2 = Math.max(r2, i); k1 = Math.min(k1, j); k2 = Math.max(k2, j); } }));
+  if (r2 < 0) return;
+  const f = [], keep = [];
+  for (let i = r1; i <= r2; i++) {
+    const row = [];
+    for (let j = k1; j <= k2; j++) {
+      const v = grid[i][j];
+      if (isF(v)) row.push(v);
+      else { row.push(''); if (v !== '' && v != null) keep.push([i, j, v]); }
+    }
+    f.push(row);
+  }
+  sh.getRange(r0 + r1, c0 + k1, f.length, f[0].length).setFormulas(f);
+  keep.forEach(([i, j, v]) => sh.getRange(r0 + i, c0 + j).setValue(v));
+}
+
+/** Текст из приложения не должен превращаться в формулу. */
+function safeText_(s) { return /^[=+\-@]/.test(s) ? "'" + s : s; }
 
 function ensureSheet_(ss, name, head, rows, format) {
   let sh = ss.getSheetByName(name);
