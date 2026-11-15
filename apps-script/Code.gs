@@ -12,7 +12,7 @@
 const DEFAULT_APP_URL = 'https://finanalytics-ai.github.io/family-budget/';
 
 // Версия кода — видна в меню и после «Обновить отчёты». Если видите другую — в Apps Script остался старый код.
-const SCRIPT_VERSION = '1.4 (16.11.2026)';
+const SCRIPT_VERSION = '1.5 (16.11.2026)';
 
 const SH = {
   J: 'Журнал', BAL: 'Остатки', PF: 'План-факт', ODDS: 'ОДДС', B: 'Бюджет',
@@ -422,13 +422,23 @@ function connectBot() {
   const props = PropertiesService.getScriptProperties();
   const token = props.getProperty('BOT_TOKEN');
   if (!token) { ui.alert('Сначала укажите токен бота (пункт 2 меню).'); return; }
-  let execUrl = props.getProperty('WEBAPP_URL') || '';
-  try { const u = ScriptApp.getService().getUrl(); if (u && /\/exec$/.test(u)) execUrl = u; } catch (e) { }
-  if (!/\/exec$/.test(execUrl)) {
-    const res = ui.prompt('Адрес веб-приложения', 'Вставьте URL развёртывания (заканчивается на /exec):', ui.ButtonSet.OK_CANCEL);
-    if (res.getSelectedButton() !== ui.Button.OK) return;
-    execUrl = res.getResponseText().trim();
-    if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(execUrl)) { ui.alert('Это не похоже на URL веб-приложения Apps Script.'); return; }
+  // Адрес всегда спрашиваем: ScriptApp.getService().getUrl() из меню таблицы часто отдаёт адрес
+  // тестового развёртывания, который требует входа в Google — из Telegram он не открывается.
+  const saved = props.getProperty('WEBAPP_URL') || '';
+  const res = ui.prompt('Адрес веб-приложения',
+    'Apps Script → Развернуть → Управление развертываниями → скопируйте «URL» веб-приложения (заканчивается на /exec, не ссылку «Библиотека»).' +
+    (saved ? '\n\nСейчас подключён:\n' + saved + '\n(пустое поле — оставить его)' : ''), ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+  const execUrl = res.getResponseText().trim() || saved;
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(execUrl)) {
+    ui.alert('Это не адрес веб-приложения. Нужна ссылка вида\nhttps://script.google.com/macros/s/…/exec'); return;
+  }
+  // Проверяем адрес так, как его увидит Telegram — без входа в Google
+  let body = '';
+  try { body = UrlFetchApp.fetch(execUrl, { muteHttpExceptions: true, followRedirects: true }).getContentText(); } catch (e) { body = String(e); }
+  if (body.indexOf('Семейный бюджет API: OK') < 0) {
+    ui.alert('Адрес не отвечает как веб-приложение бюджета.\n\nПроверьте в «Управлении развертываниями»: тип — Веб-приложение, ' +
+      '«Запуск от имени» — я, «У кого есть доступ» — Все, и что скопирован URL с /exec из этого развёртывания.'); return;
   }
   props.setProperty('WEBAPP_URL', execUrl);
   const appUrl = (props.getProperty('APP_URL') || DEFAULT_APP_URL) + '?api=' + encodeURIComponent(execUrl);
