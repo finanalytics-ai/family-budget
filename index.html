@@ -1067,15 +1067,23 @@ function screen(icon, title, text, btn){
   $('#view').innerHTML = `<div class="screen"><div class="big gl">${icon}</div><h2>${title}</h2><p>${text}</p>${btn||''}</div>`;
 }
 function skeleton(){ $('#view').innerHTML = '<div class="skel gl" style="height:200px;margin-top:8px"></div><div class="skel gl" style="height:66px"></div><div class="skel gl" style="height:220px"></div>'; }
+// Если учёт ещё не начался (первый месяц бюджета в будущем) — открываемся сразу на нём
+let startFitted = false;
+function fitStart(){
+  if (startFitted || !D || !D.months || !D.months.length) return;
+  startFitted = true;
+  const cur = today().slice(0,7);
+  if (S.month===cur && D.months[0] > cur && !D.ops.some(o=>o.date.slice(0,7)===cur)) S.month = D.months[0];
+}
 async function start(){
   $('#top').hidden = false; $('#dock').hidden = false;
   if (DEMO) $('#demoBar').hidden = false;
   else if (!inTg) return screen('📱','Откройте в Telegram','Это мини-приложение семейного бюджета. Откройте его кнопкой «Бюджет» в вашем боте.','<a class="btn" href="?demo=1">Посмотреть демо</a>');
   else if (!API) return screen('🔌','Приложение не подключено','В Google Таблице выберите меню «💰 Бюджет» → «3. Подключить приложение к боту» и откройте приложение заново.');
   if (!D && !DEMO){ try { D = JSON.parse(LS.get('fb_data')||'null'); } catch(e){ D = null; } }
-  if (D) render(); else skeleton();
+  if (D){ fitStart(); render(); } else skeleton();
   S.busy = true; setSync(true);
-  try{ D = await api('load', {}); cache(); S.busy = false; render(); }
+  try{ D = await api('load', {}); cache(); S.busy = false; fitStart(); render(); }
   catch(e){
     if (e.code==='forbidden') return screen('🔐','Нужен доступ', `Ваш Telegram ID: <code>${esc(e.tgId)}</code><br><br>Откройте Google Таблицу → лист «Доступ» и включите «Разрешён» в вашей строке.`, '<button class="btn" data-act="retry">Обновить</button>');
     if (!D) return screen('⚠️','Не удалось загрузить', esc(e.message||'Ошибка сети'), '<button class="btn" data-act="retry">Повторить</button>');

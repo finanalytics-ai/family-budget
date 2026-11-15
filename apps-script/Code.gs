@@ -11,6 +11,9 @@
 // Адрес мини-приложения (GitHub Pages). Можно переопределить свойством скрипта APP_URL.
 const DEFAULT_APP_URL = 'https://finanalytics-ai.github.io/family-budget/';
 
+// Версия кода — видна в меню и после «Обновить отчёты». Если видите другую — в Apps Script остался старый код.
+const SCRIPT_VERSION = '1.3 (16.11.2026)';
+
 const SH = {
   J: 'Журнал', BAL: 'Остатки', PF: 'План-факт', ODDS: 'ОДДС', B: 'Бюджет',
   ART: 'Статьи', WAL: 'Кошельки', CP: 'Контрагенты', ACC: 'Доступ'
@@ -60,6 +63,7 @@ const DEFAULT_WALLETS = [
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('💰 Бюджет')
+    .addItem('0. Начать учёт с месяца…', 'startFromPrompt')
     .addItem('1. Первичная настройка', 'setup')
     .addItem('2. Указать токен бота', 'setBotToken')
     .addItem('3. Подключить приложение к боту', 'connectBot')
@@ -67,6 +71,8 @@ function onOpen() {
     .addItem('Обновить отчёты (ОДДС, План-факт, Остатки)', 'rebuildReports')
     .addItem('Добавить месяц…', 'addMonthPrompt')
     .addItem('Добавить 12 месяцев в бюджет', 'extendBudget')
+    .addSeparator()
+    .addItem('О скрипте (версия ' + SCRIPT_VERSION + ')', 'aboutScript')
     .addToUi();
 }
 
@@ -132,7 +138,72 @@ function rebuildReports(silent) {
   buildBalances_(ss);
   buildPlanFact_(ss);
   buildOdds_(ss);
-  if (silent !== true) SpreadsheetApp.getActive().toast('Отчёты обновлены', '💰 Бюджет', 4);
+  const bad = checkFormulas_(ss);
+  if (bad) {
+    const msg = 'Формулы на листе «' + bad + '» не считаются (#ERROR!). Скорее всего, в Apps Script остался старый код: ' +
+      'оставьте ОДИН файл .gs с текущим кодом (версия ' + SCRIPT_VERSION + ') и повторите «Обновить отчёты».';
+    try { SpreadsheetApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
+    return;
+  }
+  if (silent !== true) ss.toast('Отчёты обновлены · версия ' + SCRIPT_VERSION, '💰 Бюджет', 5);
+}
+
+/** Возвращает имя листа, где формулы дают ошибку, или ''. */
+function checkFormulas_(ss) {
+  SpreadsheetApp.flush();
+  const probes = [[SH.ODDS, 'C4'], [SH.PF, 'C6'], [SH.BAL, 'B5']];
+  for (const [name, a1] of probes) {
+    const sh = ss.getSheetByName(name);
+    if (!sh) continue;
+    const v = String(sh.getRange(a1).getDisplayValue());
+    if (/^#(ERROR|NAME|VALUE|REF|N\/A)/.test(v)) return name;
+  }
+  return '';
+}
+
+function aboutScript() {
+  const ss = SpreadsheetApp.getActive();
+  const cols = Object.keys(monthCols_(ss)).sort();
+  SpreadsheetApp.getUi().alert('Семейный бюджет — версия кода ' + SCRIPT_VERSION +
+    '\nЛокаль таблицы: ' + ss.getSpreadsheetLocale() + ', часовой пояс: ' + ss.getSpreadsheetTimeZone() +
+    '\nМесяцы в бюджете: ' + (cols.length ? cols[0] + ' — ' + cols[cols.length - 1] + ' (' + cols.length + ')' : 'нет'));
+}
+
+/** Начало учёта: убирает месяцы раньше стартового и держит 12 месяцев вперёд. */
+function startFromPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  const now = new Date(), next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const def = Utilities.formatDate(next, Session.getScriptTimeZone(), 'yyyy-MM');
+  const r = ui.prompt('Начать учёт с месяца', 'Месяц начала учёта в формате ГГГГ-ММ (например ' + def + ').\n' +
+    'Более ранние месяцы будут убраны из «Бюджета», будет 12 месяцев начиная с этого.\nПустое поле = ' + def, ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const key = r.getResponseText().trim() || def;
+  startFrom_(SpreadsheetApp.getActive(), key);
+  ui.alert('Готово: учёт начинается с ' + key + '.\n\nУкажите начальные остатки кошельков на 1-е число этого месяца (лист «Кошельки»).');
+}
+
+function startFrom_(ss, key) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(key)) throw new Error('Неверный месяц: ' + key);
+  const sh = ss.getSheetByName(SH.B);
+  const before = monthCols_(ss);
+  const months = [];
+  let d = new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1);
+  for (let i = 0; i < 12; i++) { months.push(Utilities.formatDate(new Date(d.getFullYear(), d.getMonth() + i, 1, 12), ss.getSpreadsheetTimeZone(), 'yyyy-MM')); }
+  // 1) добавить недостающие месяцы, заполнив план из ближайшего предыдущего месяца
+  months.forEach(k => {
+    if (ensureMonthCol_(ss, k)) {
+      const map = monthCols_(ss), keys = Object.keys(map).sort(), i = keys.indexOf(k), n = sh.getLastRow() - 1;
+      const src = i > 0 ? map[keys[i - 1]] : (keys[i + 1] ? map[keys[i + 1]] : 0);
+      if (src && n > 0) sh.getRange(2, map[k], n, 1).setValues(sh.getRange(2, src, n, 1).getValues());
+    }
+  });
+  // 2) удалить месяцы раньше старта (справа налево, чтобы номера столбцов не сдвигались)
+  const map = monthCols_(ss);
+  Object.keys(map).filter(k => k < key).map(k => map[k]).sort((a, b) => b - a).forEach(c => sh.deleteColumn(c));
+  rebuildReports(true);
+  const pf = ss.getSheetByName(SH.PF);
+  if (pf) pf.getRange('B2').setValue(key);
+  return before;
 }
 
 function extendBudget() {
