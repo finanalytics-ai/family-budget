@@ -65,6 +65,7 @@ function onOpen() {
     .addItem('3. Подключить приложение к боту', 'connectBot')
     .addSeparator()
     .addItem('Обновить отчёты (ОДДС, План-факт, Остатки)', 'rebuildReports')
+    .addItem('Добавить месяц…', 'addMonthPrompt')
     .addItem('Добавить 12 месяцев в бюджет', 'extendBudget')
     .addToUi();
 }
@@ -221,7 +222,8 @@ function buildPlanFact_(ss) {
 
   const rows = [];   // {a,b,kind,f:{C,D,E,F}}
   const R = () => rows.length + 5; // номер строки листа для следующей записи (заголовок в 4-й)
-  const plan = r => `=IFERROR(SUMIFS(INDEX(${B}$D:$${lastBCol},0,MATCH($C$2,${B}$D$1:$${lastBCol}$1,0)),${B}$A:$A,$A${r},${B}$B:$B,$B${r}),0)`;
+  // сопоставление месяца по тексту ГГГГ-ММ — устойчиво к времени внутри даты в заголовке
+  const plan = r => `=IFERROR(SUMIFS(INDEX(${B}$D:$${lastBCol},0,MATCH(TEXT($C$2,"yyyy-mm"),ARRAYFORMULA(TEXT(${B}$D$1:$${lastBCol}$1,"yyyy-mm")),0)),${B}$A:$A,$A${r},${B}$B:$B,$B${r}),0)`;
   const fact = (t, r) => `=SUMIFS(${J}$D:$D,${J}$C:$C,"${t}",${J}$G:$G,$A${r},${J}$H:$H,$B${r},${J}$B:$B,">="&$C$2,${J}$B:$B,"<"&EDATE($C$2,1))`;
   const totals = {};
 
@@ -392,6 +394,9 @@ function doPost(e) {
       case 'update': data = withLock_(() => saveOp_(ss, user, p.op, p.op && p.op.id)); break;
       case 'delete': data = withLock_(() => deleteOp_(ss, p.id)); break;
       case 'saveWallet': withLock_(() => saveWallet_(ss, p.wallet, p.oldName)); data = apiLoad_(ss, user); break;
+      case 'setPlan': withLock_(() => setPlan_(ss, p)); data = apiLoad_(ss, user); break;
+      case 'addArticle': withLock_(() => addArticle_(ss, p)); data = apiLoad_(ss, user); break;
+      case 'copyPlan': withLock_(() => copyPlan_(ss, p.from, p.to)); data = apiLoad_(ss, user); break;
       default: throw new Error('Неизвестное действие');
     }
     out = { ok: true, data: data };
@@ -464,6 +469,7 @@ function apiLoad_(ss, user) {
     wallets: readWallets_(ss),
     counterparties: readCounterparties_(ss),
     budget: budget,
+    months: Object.keys(monthCols_(ss)).sort(),
     ops: readOps_(ss)
   };
 }
@@ -532,6 +538,100 @@ function deleteOp_(ss, id) {
   if (!r) throw new Error('Операция не найдена');
   sh.deleteRow(r);
   return { id: id };
+}
+
+/* ============================ ПЛАН ============================ */
+
+/** Карта «ГГГГ-ММ» → номер столбца на листе «Бюджет». */
+function monthCols_(ss) {
+  const sh = ss.getSheetByName(SH.B), tz = ss.getSpreadsheetTimeZone(), map = {};
+  const last = sh.getLastColumn();
+  if (last < 4) return map;
+  sh.getRange(1, 4, 1, last - 3).getValues()[0].forEach((d, i) => {
+    if (d instanceof Date) map[Utilities.formatDate(d, tz, 'yyyy-MM')] = i + 4;
+  });
+  return map;
+}
+
+/** Гарантирует столбец месяца в «Бюджете»; вставляет его по порядку дат. */
+function ensureMonthCol_(ss, key) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(key))) throw new Error('Неверный месяц: ' + key);
+  const map = monthCols_(ss);
+  if (map[key]) return false;
+  const sh = ss.getSheetByName(SH.B);
+  const later = Object.keys(map).filter(k => k > key).sort();
+  let col;
+  if (later.length) { col = map[later[0]]; sh.insertColumnBefore(col); }
+  else col = Math.max(sh.getLastColumn(), 3) + 1;
+  const y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7));
+  const head = sh.getRange(1, col);
+  head.setValue(new Date(y, m - 1, 1)).setNumberFormat('mmm yyyy');
+  styleHeader_(head);
+  const n = sh.getLastRow() - 1;
+  if (n > 0) sh.getRange(2, col, n, 1).setValue(0).setNumberFormat(MONEY0);
+  return true;
+}
+
+function budgetRow_(ss, group, name) {
+  const sh = ss.getSheetByName(SH.B);
+  const n = sh.getLastRow() - 1;
+  if (n < 1) return 0;
+  const v = sh.getRange(2, 1, n, 2).getValues();
+  for (let i = 0; i < v.length; i++) if (String(v[i][0]).trim() === group && String(v[i][1]).trim() === name) return i + 2;
+  return 0;
+}
+
+/** p: {group, article, amount, months:[ГГГГ-ММ]} */
+function setPlan_(ss, p, noRebuild) {
+  const a = readArticles_(ss).find(x => x.group === p.group && x.name === p.article);
+  if (!a) throw new Error('Статья не найдена: ' + p.group + ' / ' + p.article);
+  const months = (p.months || []).map(String);
+  if (!months.length || months.length > 36) throw new Error('Выберите месяцы');
+  const amount = Math.max(0, Math.round((Number(p.amount) || 0) * 100) / 100);
+  let added = false;
+  months.forEach(k => { if (ensureMonthCol_(ss, k)) added = true; });
+  let row = budgetRow_(ss, a.group, a.name);
+  if (!row) { syncBudgetRows_(ss); row = budgetRow_(ss, a.group, a.name); }
+  const map = monthCols_(ss), sh = ss.getSheetByName(SH.B);
+  months.forEach(k => sh.getRange(row, map[k]).setValue(amount).setNumberFormat(MONEY0));
+  if (added && !noRebuild) rebuildReports(true);
+  return added;
+}
+
+/** p: {article:{group,name,type,icon}, amount, months} */
+function addArticle_(ss, p) {
+  const x = p.article || {};
+  const group = String(x.group || '').trim().slice(0, 40), name = String(x.name || '').trim().slice(0, 60);
+  if (!group || !name) throw new Error('Укажите группу и название статьи');
+  if (x.type !== 'Доход' && x.type !== 'Расход') throw new Error('Неверный тип статьи');
+  if (readArticles_(ss).some(a => a.group.toLowerCase() === group.toLowerCase() && a.name.toLowerCase() === name.toLowerCase()))
+    throw new Error('Статья «' + name + '» в группе «' + group + '» уже есть');
+  const sh = ss.getSheetByName(SH.ART);
+  const r = sh.getLastRow() + 1;
+  sh.getRange(r, 5).insertCheckboxes();
+  sh.getRange(r, 1, 1, 5).setValues([[group, name, x.type, String(x.icon || '•'), true]]);
+  syncBudgetRows_(ss);
+  if (p.months && p.months.length && Number(p.amount) > 0) setPlan_(ss, { group, article: name, amount: p.amount, months: p.months }, true);
+  rebuildReports(true);
+}
+
+function copyPlan_(ss, from, to) {
+  const added = ensureMonthCol_(ss, to);
+  const map = monthCols_(ss), sh = ss.getSheetByName(SH.B);
+  if (!map[from]) throw new Error('В бюджете нет месяца ' + from);
+  const n = sh.getLastRow() - 1;
+  if (n > 0) sh.getRange(2, map[to], n, 1).setValues(sh.getRange(2, map[from], n, 1).getValues()).setNumberFormat(MONEY0);
+  if (added) rebuildReports(true);
+}
+
+function addMonthPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt('Добавить месяц', 'Месяц в формате ГГГГ-ММ, например 2027-03:', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const key = r.getResponseText().trim();
+  const ss = SpreadsheetApp.getActive();
+  if (!ensureMonthCol_(ss, key)) { ui.alert('Месяц ' + key + ' уже есть в бюджете.'); return; }
+  rebuildReports();
 }
 
 /** Создание / изменение кошелька. При переименовании обновляет Журнал и Доступ. */

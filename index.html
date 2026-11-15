@@ -220,6 +220,9 @@ details[open] .disc{transform:rotate(90deg)}
 .emojis{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;padding:10px}
 .emojis button{height:44px;border-radius:14px;font-size:22px;display:grid;place-items:center;text-align:center}
 .emojis button.on{background:var(--glass2);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ask input.nameinp,.nameinp{border:0;outline:0;background:transparent;font-size:25px;line-height:1.3;font-weight:300;letter-spacing:-.02em;text-align:center;width:100%;max-width:none;color:var(--text);padding:0}
+.nameinp::placeholder{color:var(--text3)}
 .wico{width:76px;height:76px;border-radius:24px;margin:6px auto 12px;display:grid;place-items:center;font-size:36px}
 
 /* ---------- прочее ---------- */
@@ -526,16 +529,23 @@ function viewPF(){
     <div class="tile gl"><div class="k">План</div><div class="v">${money(pf.plan)}</div></div>
     <div class="tile gl"><div class="k">Факт</div><div class="v">${money(pf.fact)}</div></div>
     <div class="tile gl"><div class="k">${t==='Расход' ? (diff>=0?'Осталось':'Перерасход') : (diff>=0?'Сверх плана':'Недобор')}</div><div class="v ${diff<0?'neg':'pos'}">${money(Math.abs(diff))}</div></div></div>`;
-  if (!pf.groups.length) return seg + head + '<div class="empty">Статей нет — добавьте их на листе «Статьи».</div>';
-  return seg + head + pf.groups.map(g => sec(esc(g.group), `<span class="v num">${money(g.fact)} из ${money(g.plan)}</span>`) + '<div class="list gl">' + g.items.map(i => {
+  const prev = mAdd(S.month,-1);
+  const empty = !Object.keys(D.budget[S.month]||{}).length, canCopy = Object.keys(D.budget[prev]||{}).length > 0;
+  const actions = `<div class="acts">
+    <button class="chip gl" data-act="art-new">＋ Новая статья</button>
+    ${canCopy ? `<button class="chip gl" data-act="plan-copy">⧉ Взять план ${MONTHS_GEN[+prev.slice(5,7)-1]}</button>` : ''}
+  </div>
+  <div class="gf" style="margin:8px 4px 0">${empty && canCopy ? `План на ${MONTHS[+S.month.slice(5,7)-1]} пуст — возьмите его из прошлого месяца или задайте по статьям.` : 'Нажмите на статью, чтобы изменить план.'}</div>`;
+  if (!pf.groups.length) return seg + head + actions + '<div class="empty">Статей пока нет</div>';
+  return seg + head + actions + pf.groups.map(g => sec(esc(g.group), `<span class="v num">${money(g.fact)} из ${money(g.plan)}</span>`) + '<div class="list gl">' + g.items.map(i => {
       const d = t==='Расход' ? i.plan - i.fact : i.fact - i.plan;
       let tag = '', rest;
       if (!i.plan){ rest = i.fact ? 'без плана' : 'план не задан'; if (i.fact && t==='Расход') tag = '<span class="tag n">Вне плана</span>'; }
       else if (t==='Расход'){ rest = d>=0 ? 'осталось '+money(d) : 'перерасход '+money(-d); if (d<0) tag = '<span class="tag n">Перерасход</span>'; else if (i.fact/i.plan>=.85) tag = '<span class="tag w">Почти всё</span>'; }
       else { rest = d>=0 ? 'план выполнен' : 'ещё '+money(-d); if (d>=0) tag = '<span class="tag p">Выполнен</span>'; }
-      return `<div class="row"><span class="ico">${esc(i.icon||'•')}</span>
+      return `<button class="row tap" data-act="plan" data-g="${esc(g.group)}" data-v="${esc(i.name)}"><span class="ico">${esc(i.icon||'•')}</span>
         <span class="m"><div class="t">${tag}<span class="n">${esc(i.name)}</span></div><div class="s">${rest}</div>${bar(i.fact,i.plan,t,'th')}</span>
-        <span class="a"><b>${money(i.fact)}</b><span class="pill2">из ${nf.format(i.plan)}</span></span></div>`; }).join('') + '</div>').join('');
+        <span class="a"><b>${money(i.fact)}</b><span class="pill2">из ${nf.format(i.plan)} ✎</span></span></button>`; }).join('') + '</div>').join('');
 }
 
 function viewOdds(){
@@ -744,7 +754,7 @@ function pickArticle(){
       return `<button class="row tap" data-act="set-art" data-g="${esc(g)}" data-v="${esc(a.name)}"><span class="ico">${esc(a.icon||'•')}</span>
         <span class="m"><div class="t"><span class="n">${esc(a.name)}</span></div><div class="s">${info}</div></span>${on ? CHECK : ''}</button>`;
     }).join('')}</div>`;
-  }).join('') + '<div class="gf" style="margin-top:14px">Статьи и план редактируются в Google Таблице на листах «Статьи» и «Бюджет».</div>');
+  }).join('') + '<div class="gf" style="margin-top:14px">Новые статьи и план по месяцам — на вкладке «План».</div>');
 }
 function pickWallet(which){
   const bal = balances(F.id);
@@ -848,13 +858,154 @@ async function saveWallet(){
   });
 }
 
+/* план и новые статьи */
+const ART_ICONS = ['🛒','☕','🍱','🍷','🏠','🔧','🚗','⛽','🚕','✈️','🏖️','🎉','🎬','🎮','🎁','👕','👗','💄','💅','✂️','💊','🏥','🧘‍♀️','🏋️','🐶','👶','🧸','🎓','📚','📱','🌐','🤖','💼','💰','📈','🏦','💳','🧾','❤️','🧹'];
+const SCOPES = m => { const mi = +m.slice(5,7)-1; return [['this','Только '+MONTHS[mi]],['rest','До конца '+m.slice(0,4)],['12','12 месяцев']]; };
+function scopeMonths(scope, m){
+  if (scope==='this') return [m];
+  const out = []; const end = scope==='rest' ? m.slice(0,4)+'-12' : mAdd(m,11);
+  for (let k=m; k<=end; k=mAdd(k,1)) out.push(k);
+  return out;
+}
+function scopeInfo(months){
+  const have = D.months || Object.keys(D.budget);
+  const fresh = months.filter(k => have.indexOf(k)<0);
+  return `Запишем в ${months.length} ${plural(months.length,'месяц','месяца','месяцев')}${months.length>1 ? ': '+mShort(months[0])+' — '+mShort(months[months.length-1]) : ''}.` +
+    (fresh.length ? ` В таблице появятся новые столбцы: ${fresh.slice(0,4).map(mShort).join(', ')}${fresh.length>4?' и ещё '+(fresh.length-4):''}.` : '');
+}
+function amountField(){
+  return `<div class="in"><span class="meas" id="fMeas"></span><input id="fAmount" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(F.amount||'')}"><span class="rub">₽</span></div>`;
+}
+function bindAmount(onInput){
+  const fit = () => { const a = $('#fAmount'); $('#fMeas').textContent = a.value || a.placeholder; a.style.width = ($('#fMeas').offsetWidth + 8) + 'px'; };
+  $('#fAmount').addEventListener('input', () => { F.amount = $('#fAmount').value; fit(); onInput && onInput(); });
+  fit();
+}
+function openPlan(g, name){
+  const art = artOf(g, name); if (!art) return;
+  const m = S.month, mi = +m.slice(5,7)-1, t = art.type;
+  const plan = planOf(m,g,name), fact = factOf(m,g,name,t);
+  const hist = [1,2,3].map(k => mAdd(m,-k));
+  const avg = sum(hist, k => factOf(k,g,name,t)) / 3;
+  mode = 'plan';
+  F = { group:g, article:name, type:t, scope:'this', amount: plan ? String(plan) : '' };
+  openSheet('План · ' + MONTHS[mi] + ' ' + m.slice(0,4), 'Сохранить план', `
+    <div class="ask" style="padding-top:14px">
+      <div class="wico gl">${esc(art.icon||'•')}</div>
+      <div class="q">${esc(name)}</div>
+      <div class="hint">${esc(g)} · ${t==='Расход'?'расход':'доход'} · план на ${MONTHS[mi]}</div>
+      ${amountField()}
+      <div class="hint" id="pHint"></div>
+    </div>
+    <div class="gh">Применить к месяцам</div>
+    <div class="chips" id="pScope"></div>
+    <div class="gf" id="pInfo"></div>
+    <div class="gh">Для ориентира</div>
+    <div class="box gl">
+      <div class="fr"><span class="k">${t==='Расход'?'Потрачено':'Получено'} в ${MONTHS_PREP[mi]}</span><span class="val">${money(fact)}</span></div>
+      ${hist.map(k=>`<div class="fr"><span class="k t2">${esc(mShort(k))}</span><span class="val t2">план ${nf.format(planOf(k,g,name))} · факт ${nf.format(factOf(k,g,name,t))}</span></div>`).join('')}
+      <div class="fr"><span class="k">Среднее за 3 месяца</span><span class="val">${money(Math.round(avg))}</span></div>
+    </div>
+    <div class="gf">План хранится в Google Таблице на листе «Бюджет». Если столбца нужного месяца нет — он будет добавлен автоматически.</div>`);
+  bindAmount(updPlan);
+  updPlan();
+}
+function updPlan(){
+  if (mode!=='plan') return;
+  const m = S.month, v = parseAmount(F.amount), a = isNaN(v) ? NaN : v;
+  const fact = factOf(m, F.group, F.article, F.type);
+  $('#pScope').innerHTML = SCOPES(m).map(([k,l])=>`<button class="chip gl ${F.scope===k?'on':''}" data-act="pscope" data-v="${k}">${l}</button>`).join('');
+  $('#pInfo').textContent = scopeInfo(scopeMonths(F.scope, m));
+  $('#pHint').innerHTML = !F.amount ? 'Введите сумму плана (0 — убрать план)'
+    : isNaN(a) ? 'Проверьте сумму'
+    : F.type==='Расход' ? (a>=fact ? `Останется ${money(a-fact)} при текущем факте` : `<span class="neg">Факт уже больше на ${money(fact-a)}</span>`)
+    : (fact>=a ? 'План уже выполнен' : `До плана ещё ${money(a-fact)}`);
+  $('#shDone').disabled = !F.amount || isNaN(a) || a<0 || S.saving;
+}
+async function savePlan(){
+  const amount = parseAmount(F.amount);
+  if (isNaN(amount) || amount<0) return fail('Проверьте сумму', '#fAmount');
+  const months = scopeMonths(F.scope, S.month);
+  await busy(async () => {
+    D = await api('setPlan', { group:F.group, article:F.article, amount, months });
+    cache(); haptic('success'); closeSheet(); render();
+    hud(months.length>1 ? `План записан в ${months.length} ${plural(months.length,'месяц','месяца','месяцев')}` : 'План сохранён');
+  });
+}
+function openArtNew(){
+  mode = 'art';
+  const t = S.pfType;
+  F = { type:t, group: groupsFor(t)[0] || 'Общие', newGroup:false, icon: t==='Доход' ? '💼' : '🛒', scope:'rest', amount:'' };
+  openSheet('Новая статья', 'Создать статью', `
+    <div class="seg gl" id="aType"><button data-act="atype" data-v="Расход">Расход</button><button data-act="atype" data-v="Доход">Доход</button></div>
+    <div class="ask" style="padding-top:18px">
+      <div class="wico gl" id="aIco"></div>
+      <input class="nameinp" id="aName" placeholder="Название статьи" autocomplete="off" maxlength="60">
+      <div class="hint">Например: Такси, Секция ребёнка, Подработка</div>
+    </div>
+    <div class="gh">Группа</div>
+    <div class="chips" id="aGroups"></div>
+    <div class="box gl" id="aNewBox" style="margin-top:10px" hidden><div class="fr"><span class="k">Новая группа</span><input class="txt" id="aNewGroup" placeholder="Например, Дети" autocomplete="off" maxlength="40"></div></div>
+    <div class="gh">План в месяц</div>
+    <div class="box gl"><div class="fr"><span class="k">Сумма</span><input class="txt" id="aPlan" inputmode="decimal" placeholder="Можно задать позже" autocomplete="off"></div></div>
+    <div class="gh">Применить к месяцам</div>
+    <div class="chips" id="aScope"></div>
+    <div class="gf" id="aInfo"></div>
+    <div class="gh">Иконка</div>
+    <div class="box gl"><div class="emojis" id="aIcons"></div></div>
+    <div class="gf">Статья появится в Google Таблице на листах «Статьи» и «Бюджет», отчёты перестроятся автоматически.</div>`);
+  ['#aName','#aNewGroup','#aPlan'].forEach(s => $(s).addEventListener('input', updArt));
+  updArt();
+  setTimeout(()=>{ const a=$('#aName'); if (a && mode==='art') a.focus(); }, 480);
+}
+function updArt(){
+  if (mode!=='art') return;
+  document.querySelectorAll('#aType button').forEach(b=>b.classList.toggle('on', b.dataset.v===F.type));
+  const groups = uniq(D.articles.map(a=>a.group));
+  $('#aGroups').innerHTML = groups.map(g=>`<button class="chip gl ${!F.newGroup&&g===F.group?'on':''}" data-act="agroup" data-v="${esc(g)}">${esc(g)}</button>`).join('') +
+    `<button class="chip gl ${F.newGroup?'on':''}" data-act="agroup" data-v="">＋ Новая</button>`;
+  $('#aNewBox').hidden = !F.newGroup;
+  $('#aIcons').innerHTML = uniq(ART_ICONS.concat(F.icon)).map(i=>`<button class="${i===F.icon?'on':''}" data-act="aicon" data-v="${esc(i)}">${esc(i)}</button>`).join('');
+  $('#aIco').textContent = F.icon;
+  $('#aScope').innerHTML = SCOPES(S.month).map(([k,l])=>`<button class="chip gl ${F.scope===k?'on':''}" data-act="ascope" data-v="${k}">${l}</button>`).join('');
+  const plan = $('#aPlan').value.trim();
+  $('#aInfo').textContent = plan ? scopeInfo(scopeMonths(F.scope, S.month)) : 'Без суммы статья появится с нулевым планом.';
+  const group = F.newGroup ? $('#aNewGroup').value.trim() : F.group;
+  $('#shDone').disabled = !$('#aName').value.trim() || !group || (plan && isNaN(parseAmount(plan))) || S.saving;
+}
+async function saveArt(){
+  const name = $('#aName').value.trim();
+  const group = F.newGroup ? $('#aNewGroup').value.trim() : F.group;
+  const planS = $('#aPlan').value.trim(), amount = planS ? parseAmount(planS.replace('₽','')) : 0;
+  if (!name) return fail('Введите название', '#aName');
+  if (!group) return fail('Укажите группу', '#aNewGroup');
+  if (isNaN(amount)) return fail('Проверьте сумму плана', '#aPlan');
+  if (D.articles.some(a => a.group.toLowerCase()===group.toLowerCase() && a.name.toLowerCase()===name.toLowerCase())) return fail('Такая статья уже есть', '#aName');
+  const months = amount>0 ? scopeMonths(F.scope, S.month) : [];
+  const t = F.type;
+  await busy(async () => {
+    D = await api('addArticle', { article:{ group, name, type:t, icon:F.icon }, amount, months });
+    cache(); haptic('success'); closeSheet(); S.pfType = t; render();
+    hud('Статья «' + name + '» добавлена');
+  });
+}
+async function copyPlan(){
+  const from = mAdd(S.month,-1), to = S.month;
+  const filled = Object.keys(D.budget[to]||{}).length;
+  if (!(await ask(`Скопировать план ${MONTHS_GEN[+from.slice(5,7)-1]} в ${MONTHS[+to.slice(5,7)-1]}?` + (filled ? ' Текущий план этого месяца будет заменён.' : '')))) return;
+  S.busy = true; setSync(true);
+  try { D = await api('copyPlan', { from, to }); cache(); haptic('success'); hud('План скопирован'); }
+  catch(e){ hud(e.message); }
+  finally { S.busy = false; render(); }
+}
+
 /* общее */
 async function busy(fn){
   if (S.saving) return;
   S.saving = true; const b = $('#shDone'); b.disabled = true; const txt = b.textContent; b.textContent = 'Сохраняю…';
   try { await fn(); }
   catch(e){ haptic('error'); hud(e.message || 'Не удалось сохранить'); }
-  finally { S.saving = false; b.textContent = txt; b.disabled = false; if (mode==='op') updInfo(); }
+  finally { S.saving = false; b.textContent = txt; b.disabled = false; if (mode==='op') updInfo(); if (mode==='plan') updPlan(); if (mode==='art') updArt(); }
 }
 function fail(msg, focus){ haptic('error'); hud(msg); if (focus){ const el=$(focus); if (el) el.focus(); } }
 function ask(msg){
@@ -884,7 +1035,15 @@ document.addEventListener('click', e => {
     case 'wallet-new': openWallet(null, mode==='op'); break;
     case 'close': closeSheet(); break;
     case 'back': popPage(); break;
-    case 'done': if (mode==='op') saveOp(); else if (mode==='wallet') saveWallet(); break;
+    case 'done': if (mode==='op') saveOp(); else if (mode==='wallet') saveWallet(); else if (mode==='plan') savePlan(); else if (mode==='art') saveArt(); break;
+    case 'plan': openPlan(el.dataset.g, v); break;
+    case 'pscope': F.scope = v; updPlan(); haptic(); break;
+    case 'art-new': openArtNew(); break;
+    case 'plan-copy': copyPlan(); break;
+    case 'atype': F.type = v; F.group = groupsFor(v)[0] || F.group; F.icon = v==='Доход' ? '💼' : '🛒'; updArt(); haptic(); break;
+    case 'agroup': if (v) { F.group = v; F.newGroup = false; } else { F.newGroup = true; setTimeout(()=>$('#aNewGroup').focus(), 50); } updArt(); haptic(); break;
+    case 'aicon': F.icon = v; updArt(); haptic(); break;
+    case 'ascope': F.scope = v; updArt(); haptic(); break;
     case 'delete': deleteOp(); break;
     case 'ftype': if (F.type!==v){ F.type = v; F.group=''; F.article=''; if (v!=='Перевод') F.wallet2=''; updOp(); haptic(); } break;
     case 'fpick': { const same = F.group===el.dataset.g && F.article===v; F.group = same ? '' : el.dataset.g; F.article = same ? '' : v; updOp(); haptic(); break; }
@@ -939,6 +1098,14 @@ function demoApi(action, p){
     if (!DEMO_DB) DEMO_DB = demoData();
     if (action==='load') res(JSON.parse(JSON.stringify(DEMO_DB)));
     else if (action==='delete') res({ id:p.id });
+    else if (action==='setPlan' || action==='addArticle' || action==='copyPlan'){
+      const db = JSON.parse(JSON.stringify(D));
+      const put = (g,a,amt,months) => months.forEach(k => { db.budget[k] = db.budget[k] || {}; if (amt>0) db.budget[k][akey(g,a)] = amt; else delete db.budget[k][akey(g,a)]; if (db.months.indexOf(k)<0) db.months.push(k); });
+      if (action==='setPlan') put(p.group, p.article, p.amount, p.months);
+      if (action==='addArticle'){ db.articles.push({ ...p.article, active:true }); put(p.article.group, p.article.name, p.amount, p.months||[]); }
+      if (action==='copyPlan'){ db.budget[p.to] = { ...(db.budget[p.from]||{}) }; if (db.months.indexOf(p.to)<0) db.months.push(p.to); }
+      db.months.sort(); DEMO_DB = db; res(JSON.parse(JSON.stringify(db)));
+    }
     else if (action==='saveWallet'){
       const db = JSON.parse(JSON.stringify(D)), w = p.wallet;
       if (p.oldName){ const x = db.wallets.find(z=>z.name===p.oldName); Object.assign(x, w);
@@ -982,7 +1149,7 @@ function demoData(){
     for (let k=1; k<=days; k+=3) add(d(k),'Расход','Люся','Обеды',350+rnd()*500,'Карта Люси');
     if (days>14) add(d(15),'Расход','Общие','Развлечения',3800,'Наличные','Кино');
   });
-  return { user:{id:1,name:'Кирилл',group:'',wallet:''}, articles, wallets, counterparties:['Пятёрочка','ВкусВилл','Кофейня','Ростелеком','Мосэнергосбыт'], budget, ops };
+  return { user:{id:1,name:'Кирилл',group:'',wallet:''}, articles, wallets, counterparties:['Пятёрочка','ВкусВилл','Кофейня','Ростелеком','Мосэнергосбыт'], budget, months:Object.keys(budget).sort(), ops };
 }
 start();
 </script>
