@@ -304,8 +304,9 @@ const tg = window.Telegram && window.Telegram.WebApp;
 const inTg = !!(tg && tg.initData);
 const qs = new URLSearchParams(location.search);
 const LS = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
-let API = qs.get('api');
-if (API) LS.set('fb_api', API); else API = LS.get('fb_api');
+let API = qs.get('api'), API_SRC = 'ссылка кнопки';
+if (API) LS.set('fb_api', API); else { API = LS.get('fb_api'); API_SRC = 'память телефона'; }
+const APP_BUILD = '2026-11-16.3';
 const DEMO = qs.has('demo');
 
 const $ = s => document.querySelector(s);
@@ -1068,6 +1069,28 @@ function screen(icon, title, text, btn){
   $('#view').innerHTML = `<div class="screen"><div class="big gl">${icon}</div><h2>${title}</h2><p>${text}</p>${btn||''}</div>`;
 }
 function skeleton(){ $('#view').innerHTML = '<div class="skel gl" style="height:200px;margin-top:8px"></div><div class="skel gl" style="height:66px"></div><div class="skel gl" style="height:220px"></div>'; }
+// Диагностика связи с Apps Script: показывает адрес, его источник и результат пробных запросов
+async function diagnose(err){
+  const out = [];
+  const put = s => { out.push(s); const el = $('#diag'); if (el) el.innerHTML = out.map(esc).join('<br>'); };
+  const id = (API||'').match(/\/s\/([\w-]+)\/(exec|dev)/);
+  put('Сборка: ' + APP_BUILD + ' · Telegram ' + (tg ? (tg.platform + ' ' + tg.version) : '—'));
+  put('Адрес из: ' + API_SRC + (qs.get('api') && LS.get('fb_api') && qs.get('api')!==LS.get('fb_api') ? ' (в памяти другой)' : ''));
+  put('Адрес: …' + (id ? id[1].slice(-12) + '/' + id[2] : (API||'нет').slice(0,50)));
+  put('Ошибка: ' + (err && (err.name + ': ' + err.message)));
+  const t = (p) => Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('таймаут 15 с')),15000))]);
+  try {
+    const r = await t(fetch(API, { method:'GET' }));
+    const txt = await r.text();
+    put('GET: ' + r.status + ' · ' + (txt.indexOf('API: OK')>=0 ? 'OK (сервер отвечает)' : txt.replace(/\s+/g,' ').slice(0,80)));
+  } catch(e){ put('GET: ' + e.name + ': ' + e.message); }
+  try {
+    const r = await t(fetch(API, { method:'POST', body: JSON.stringify({ action:'ping', payload:{}, initData:'' }) }));
+    const txt = await r.text();
+    put('POST: ' + r.status + ' · ' + txt.replace(/\s+/g,' ').slice(0,90));
+  } catch(e){ put('POST: ' + e.name + ': ' + e.message); }
+  put('initData: ' + (tg && tg.initData ? tg.initData.length + ' симв.' : 'нет'));
+}
 // Если учёт ещё не начался (первый месяц бюджета в будущем) — открываемся сразу на нём
 let startFitted = false;
 function fitStart(){
@@ -1087,11 +1110,14 @@ async function start(){
   try{ D = await api('load', {}); cache(); S.busy = false; fitStart(); render(); }
   catch(e){
     if (e.code==='forbidden') return screen('🔐','Нужен доступ', `Ваш Telegram ID: <code>${esc(e.tgId)}</code><br><br>Откройте Google Таблицу → лист «Доступ» и включите «Разрешён» в вашей строке.`, '<button class="btn" data-act="retry">Обновить</button>');
-    if (!D && (e instanceof TypeError || /fetch|network|json/i.test(e.message||''))) return screen('📡','Нет ответа от сервера',
-      `Приложение не получило ответ от скрипта Google. Проверьте в Apps Script → «Управление развертываниями»:<br><br>
-       • тип — <b>Веб-приложение</b>, «Выполнять как» — <b>Я</b><br>• «У кого есть доступ» — <b>Все</b> (не «Все, у кого есть аккаунт Google»)<br>• адрес заканчивается на <b>/exec</b><br><br>
-       Кнопка ниже откроет адрес сервера: должно появиться «Семейный бюджет API: OK».<br><span style="font-size:12px;word-break:break-all;opacity:.7">${esc((API||'').replace(/^https:\/\/script\.google\.com\/macros\/s\//,'…/').slice(0,60))}</span>`,
-      '<button class="btn" data-act="open-api">Проверить сервер</button><br><button class="btn" style="background:var(--glass2);color:var(--text);margin-top:10px" data-act="retry">Повторить</button>');
+    if (!D && (e instanceof TypeError || /fetch|network|json/i.test(e.message||''))){
+      screen('📡','Нет ответа от сервера',
+        `Приложение не получило ответ от скрипта Google. Ниже — диагностика: сделайте скриншот и пришлите его.<br><br>
+        <span id="diag" style="display:block;text-align:left;font:12px/1.55 ui-monospace,Menlo,monospace;word-break:break-all;background:var(--glass);border:1px solid var(--edge);border-radius:14px;padding:10px 12px">Проверяю…</span>`,
+        '<button class="btn" data-act="open-api">Открыть адрес сервера</button><br><button class="btn" style="background:var(--glass2);color:var(--text);margin-top:10px" data-act="retry">Повторить</button>');
+      diagnose(e);
+      return;
+    }
     if (!D) return screen('⚠️','Не удалось загрузить', esc(e.message||'Ошибка сети'), '<button class="btn" data-act="retry">Повторить</button>');
     hud('Нет связи — показаны сохранённые данные');
   }finally{ S.busy = false; setSync(false); }

@@ -12,7 +12,7 @@
 const DEFAULT_APP_URL = 'https://finanalytics-ai.github.io/family-budget/';
 
 // Версия кода — видна в меню и после «Обновить отчёты». Если видите другую — в Apps Script остался старый код.
-const SCRIPT_VERSION = '1.5 (16.11.2026)';
+const SCRIPT_VERSION = '1.6 (16.11.2026)';
 
 const SH = {
   J: 'Журнал', BAL: 'Остатки', PF: 'План-факт', ODDS: 'ОДДС', B: 'Бюджет',
@@ -519,8 +519,9 @@ function checkAccess_(ss, u) {
   const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username || String(u.id);
   if (!row) {
     withLock_(() => {
-      sh.appendRow([u.id, name, false, '', '']);
-      sh.getRange(sh.getLastRow(), 3).insertCheckboxes();
+      const r = nextRow_(sh);
+      sh.getRange(r, 3).insertCheckboxes();
+      sh.getRange(r, 1, 1, 5).setValues([[u.id, name, false, '', '']]);
     });
   }
   if (!row || row[2] !== true) {
@@ -689,7 +690,7 @@ function addArticle_(ss, p) {
   if (readArticles_(ss).some(a => a.group.toLowerCase() === group.toLowerCase() && a.name.toLowerCase() === name.toLowerCase()))
     throw new Error('Статья «' + name + '» в группе «' + group + '» уже есть');
   const sh = ss.getSheetByName(SH.ART);
-  const r = sh.getLastRow() + 1;
+  const r = nextRow_(sh);
   sh.getRange(r, 5).insertCheckboxes();
   sh.getRange(r, 1, 1, 5).setValues([[group, name, x.type, String(x.icon || '•'), true]]);
   syncBudgetRows_(ss);
@@ -730,7 +731,7 @@ function saveWallet_(ss, w, oldName) {
   const dup = names.findIndex(x => x.toLowerCase() === name.toLowerCase());
   if (dup >= 0 && dup !== oldIdx) throw new Error('Кошелёк «' + name + '» уже есть');
   const row = [name, String(w.owner || ''), initial, String(w.icon || '💳'), w.active !== false];
-  const r = oldIdx >= 0 ? oldIdx + 2 : sh.getLastRow() + 1;
+  const r = oldIdx >= 0 ? oldIdx + 2 : nextRow_(sh);
   if (oldIdx < 0) sh.getRange(r, 5).insertCheckboxes();
   sh.getRange(r, 1, 1, 5).setValues([row]);
   sh.getRange(r, 3).setNumberFormat(MONEY);
@@ -842,6 +843,20 @@ function loc_(f) {
     out += (ch === ',' && !dq && !sq) ? ';' : ch;
   }
   return out;
+}
+
+/**
+ * Первая строка после последней заполненной по столбцу A.
+ * getLastRow() не годится: столбец с галочками до конца листа считается заполненным (FALSE).
+ */
+function nextRow_(sh) {
+  const n = sh.getMaxRows();
+  if (n < 2) return 2;
+  const a = sh.getRange(2, 1, n - 1, 1).getValues();
+  let last = 1;
+  for (let i = a.length - 1; i >= 0; i--) if (String(a[i][0]).trim() !== '') { last = i + 2; break; }
+  if (last + 1 > n) sh.insertRowsAfter(n, 10);
+  return last + 1;
 }
 
 /** Текст из приложения не должен превращаться в формулу. */
