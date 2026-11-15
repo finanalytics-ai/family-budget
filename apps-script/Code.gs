@@ -12,7 +12,7 @@
 const DEFAULT_APP_URL = 'https://finanalytics-ai.github.io/family-budget/';
 
 // Версия кода — видна в меню и после «Обновить отчёты». Если видите другую — в Apps Script остался старый код.
-const SCRIPT_VERSION = '1.3 (16.11.2026)';
+const SCRIPT_VERSION = '1.4 (16.11.2026)';
 
 const SH = {
   J: 'Журнал', BAL: 'Остатки', PF: 'План-факт', ODDS: 'ОДДС', B: 'Бюджет',
@@ -133,6 +133,7 @@ function setup() {
 
 function rebuildReports(silent) {
   const ss = SpreadsheetApp.getActive();
+  detectSep_(ss);
   syncBudgetRows_(ss);
   setJournalValidation_(ss);
   buildBalances_(ss);
@@ -140,8 +141,8 @@ function rebuildReports(silent) {
   buildOdds_(ss);
   const bad = checkFormulas_(ss);
   if (bad) {
-    const msg = 'Формулы на листе «' + bad + '» не считаются (#ERROR!). Скорее всего, в Apps Script остался старый код: ' +
-      'оставьте ОДИН файл .gs с текущим кодом (версия ' + SCRIPT_VERSION + ') и повторите «Обновить отчёты».';
+    const msg = 'Формулы на листе «' + bad + '» дают ошибку. Локаль таблицы: ' + ss.getSpreadsheetLocale() +
+      ', разделитель аргументов: «' + FORMULA_SEP + '». Пришлите, пожалуйста, скриншот формулы из ячейки — поправлю.';
     try { SpreadsheetApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
     return;
   }
@@ -289,7 +290,7 @@ function buildPlanFact_(ss) {
   const sel = sh.getRange('B2');
   sel.setNumberFormat('@').setValue(monthList.indexOf(cur) >= 0 ? cur : (monthList[0] || cur)).setBackground('#fff8d6').setFontWeight('bold');
   if (monthList.length) sel.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(monthList).build());
-  sh.getRange('C2').setFormula('=DATE(VALUE(LEFT(B2,4)),VALUE(RIGHT(B2,2)),1)').setNumberFormat('mmmm yyyy').setFontColor('#888');
+  sh.getRange('C2').setFormula(loc_('=DATE(VALUE(LEFT(B2,4)),VALUE(RIGHT(B2,2)),1)')).setNumberFormat('mmmm yyyy').setFontColor('#888');
 
   const rows = [];   // {a,b,kind,f:{C,D,E,F}}
   const R = () => rows.length + 5; // номер строки листа для следующей записи (заголовок в 4-й)
@@ -791,13 +792,46 @@ function writeGrid_(sh, r0, c0, grid) {
     const row = [];
     for (let j = k1; j <= k2; j++) {
       const v = grid[i][j];
-      if (isF(v)) row.push(v);
+      if (isF(v)) row.push(loc_(v));
       else { row.push(''); if (v !== '' && v != null) keep.push([i, j, v]); }
     }
     f.push(row);
   }
   sh.getRange(r0 + r1, c0 + k1, f.length, f[0].length).setFormulas(f);
   keep.forEach(([i, j, v]) => sh.getRange(r0 + i, c0 + j).setValue(v));
+}
+
+/**
+ * Разделитель аргументов в формулах зависит от локали таблицы: в русской — «;», в английской — «,».
+ * Определяем опытным путём: пишем =SUM(1,2) на временный лист и смотрим, посчиталось ли.
+ */
+let FORMULA_SEP = null;
+function detectSep_(ss) {
+  if (FORMULA_SEP) return FORMULA_SEP;
+  const tmp = ss.insertSheet('__sep_test_' + Date.now());
+  try {
+    const c = tmp.getRange('A1');
+    c.setFormula('=SUM(1,2)'); SpreadsheetApp.flush();
+    FORMULA_SEP = c.getDisplayValue() === '3' ? ',' : ';';
+  } catch (e) {
+    FORMULA_SEP = ';';
+  } finally {
+    ss.deleteSheet(tmp);
+  }
+  return FORMULA_SEP;
+}
+
+/** Переводит формулу на разделитель таблицы: «,» → «;» вне строк "…" и имён листов '…'. */
+function loc_(f) {
+  if ((FORMULA_SEP || ';') === ',') return f;
+  let out = '', dq = false, sq = false;
+  for (let i = 0; i < f.length; i++) {
+    const ch = f[i];
+    if (ch === '"' && !sq) dq = !dq;
+    else if (ch === "'" && !dq) sq = !sq;
+    out += (ch === ',' && !dq && !sq) ? ';' : ch;
+  }
+  return out;
 }
 
 /** Текст из приложения не должен превращаться в формулу. */
