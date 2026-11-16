@@ -346,7 +346,7 @@ const qs = new URLSearchParams(location.search);
 const LS = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
 let API = qs.get('api'), API_SRC = 'ссылка кнопки';
 if (API) LS.set('fb_api', API); else { API = LS.get('fb_api'); API_SRC = 'память телефона'; }
-const APP_BUILD = '2026-11-16.3';
+const APP_BUILD = '2026-11-16.10';
 const DEMO = qs.has('demo');
 
 const $ = s => document.querySelector(s);
@@ -1515,6 +1515,23 @@ function demoData(){
   });
   return { user:{id:1,name:'Кирилл',group:'',wallet:''}, articles, wallets, counterparties:['Пятёрочка','ВкусВилл','Кофейня','Ростелеком','Мосэнергосбыт'], budget, months:Object.keys(budget).sort(), people:['Кирилл','Люся','Общие'], ops };
 }
+// Автообновление: Telegram на iPhone долго держит старую страницу в кеше.
+// Сверяем номер сборки со свежей копией с сервера и при расхождении перезагружаемся.
+async function checkUpdate(){
+  if (DEMO && location.hostname==='localhost') return;
+  try {
+    const url = location.pathname + '?_=' + Date.now();
+    const txt = await (await fetch(url, { cache:'no-store' })).text();
+    const m = txt.match(/const APP_BUILD = '([^']+)'/);
+    if (!m || m[1]===APP_BUILD) return;
+    const key = 'fb_reload_' + m[1];
+    if (LS.get(key)) return;            // уже пробовали перезагрузиться на эту сборку
+    LS.set(key, '1');
+    const q = new URLSearchParams(location.search); q.set('v', m[1]);
+    location.replace(location.pathname + '?' + q.toString() + location.hash);
+  } catch(e){}
+}
+checkUpdate();
 start();
 </script>
 </body>
