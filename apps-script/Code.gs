@@ -12,14 +12,14 @@
 const DEFAULT_APP_URL = 'https://finanalytics-ai.github.io/family-budget/';
 
 // Версия кода — видна в меню и после «Обновить отчёты». Если видите другую — в Apps Script остался старый код.
-const SCRIPT_VERSION = '1.8 (16.11.2026)';
+const SCRIPT_VERSION = '1.9 (16.11.2026)';
 
 const SH = {
   J: 'Журнал', BAL: 'Остатки', PF: 'План-факт', ODDS: 'ОДДС', B: 'Бюджет',
   ART: 'Статьи', WAL: 'Кошельки', CP: 'Контрагенты', ACC: 'Доступ'
 };
 const TYPES = ['Расход', 'Доход', 'Перевод'];
-const J_HEAD = ['ID', 'Дата', 'Тип', 'Сумма', 'Кошелёк', 'Кошелёк-получатель', 'Группа', 'Статья', 'Контрагент', 'Комментарий', 'Автор', 'Создано'];
+const J_HEAD = ['ID', 'Дата', 'Тип', 'Сумма', 'Кошелёк', 'Кошелёк-получатель', 'Группа', 'Статья', 'Контрагент', 'Комментарий', 'Автор', 'Создано', 'Кто платил'];
 const ART_HEAD = ['Группа', 'Статья', 'Тип', 'Иконка', 'Активна'];
 const WAL_HEAD = ['Кошелёк', 'Владелец', 'Начальный остаток', 'Иконка', 'Активен'];
 const ACC_HEAD = ['Telegram ID', 'Имя', 'Разрешён', 'Группа по умолчанию', 'Кошелёк по умолчанию'];
@@ -558,13 +558,31 @@ function apiLoad_(ss, user) {
     articles: readArticles_(ss),
     wallets: readWallets_(ss),
     counterparties: readCounterparties_(ss),
+    people: readPeople_(ss),
     budget: budget,
     months: Object.keys(monthCols_(ss)).sort(),
     ops: readOps_(ss)
   };
 }
 
+/** Кто может платить: владельцы кошельков (Люся, Кирилл, Общие…). */
+function readPeople_(ss) {
+  const list = readWallets_(ss).map(w => String(w.owner || '').trim()).filter(Boolean);
+  const out = list.filter((x, i) => list.indexOf(x) === i);
+  return out.length ? out : ['Люся', 'Кирилл'];
+}
+
+/** В старых таблицах нет столбца «Кто платил» — добавляем заголовок. */
+function ensureJournalHead_(ss) {
+  const sh = ss.getSheetByName(SH.J);
+  const c = J_HEAD.length;
+  ensureGrid_(sh, 1, c);
+  const h = sh.getRange(1, c);
+  if (String(h.getValue()) !== J_HEAD[c - 1]) { h.setValue(J_HEAD[c - 1]); styleHeader_(h); sh.setColumnWidth(c, 120); }
+}
+
 function readOps_(ss) {
+  ensureJournalHead_(ss);
   const sh = ss.getSheetByName(SH.J);
   const tz = ss.getSpreadsheetTimeZone();
   const n = sh.getLastRow() - 1;
@@ -577,7 +595,7 @@ function readOps_(ss) {
     if (!r[0]) { r[0] = newId_(); sh.getRange(i + 2, 1).setValue(r[0]); fixed = true; }
     out.push({
       id: String(r[0]), date: Utilities.formatDate(r[1], tz, 'yyyy-MM-dd'), type: r[2], amount: Number(r[3]) || 0,
-      wallet: r[4], wallet2: r[5], group: r[6], article: r[7], cp: r[8], comment: r[9], author: r[10]
+      wallet: r[4], wallet2: r[5], group: r[6], article: r[7], cp: r[8], comment: r[9], author: r[10], payer: r[12] || ''
     });
   });
   return out;
@@ -604,6 +622,8 @@ function saveOp_(ss, user, op, id) {
   }
   const cp = safeText_(String(op.cp || '').trim().slice(0, 100));
   const comment = safeText_(String(op.comment || '').trim().slice(0, 500));
+  const payer = type === 'Перевод' ? '' : safeText_(String(op.payer || '').trim().slice(0, 40));
+  ensureJournalHead_(ss);
   const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
   const sh = ss.getSheetByName(SH.J);
   let rowIdx;
@@ -616,11 +636,11 @@ function saveOp_(ss, user, op, id) {
     ensureGrid_(sh, rowIdx, J_HEAD.length);
   }
   const author = id && rowIdx <= sh.getLastRow() ? (sh.getRange(rowIdx, 11).getValue() || user.name) : user.name;
-  sh.getRange(rowIdx, 1, 1, J_HEAD.length).setValues([[id, date, type, amount, op.wallet, wallet2, group, article, cp, comment, author, new Date()]]);
+  sh.getRange(rowIdx, 1, 1, J_HEAD.length).setValues([[id, date, type, amount, op.wallet, wallet2, group, article, cp, comment, author, new Date(), payer]]);
   if (cp) addCounterparty_(ss, cp);
   const tz = ss.getSpreadsheetTimeZone();
   return { id: id, date: Utilities.formatDate(date, tz, 'yyyy-MM-dd'), type: type, amount: amount, wallet: op.wallet,
-    wallet2: wallet2, group: group, article: article, cp: cp, comment: comment, author: author };
+    wallet2: wallet2, group: group, article: article, cp: cp, comment: comment, author: author, payer: payer };
 }
 
 function deleteOp_(ss, id) {

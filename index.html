@@ -234,6 +234,9 @@ details[open] .disc{transform:rotate(90deg)}
 .fchips{display:flex;gap:6px;overflow-x:auto;margin:10px -18px 0;padding:0 18px;scrollbar-width:none}
 .fchips::-webkit-scrollbar{display:none}
 .fchips .chip{height:32px;font-size:13px;padding:0 12px}
+.pchips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto;padding:8px 0}
+.pchips .chip{height:30px;font-size:13.5px;padding:0 12px;background:var(--glass2)}
+.pchips .chip.on{background:var(--accent);color:var(--on-accent)}
 .segbar{display:flex;gap:2px;height:14px;margin:4px 0 2px}
 .segbar i{display:block;height:100%;min-width:3px}
 .segbar i:first-child{border-radius:4px 0 0 4px} .segbar i:last-child{border-radius:0 4px 4px 0} .segbar i:only-child{border-radius:4px}
@@ -517,8 +520,8 @@ const sec = (title, right) => `<div class="sec"><h2>${title}</h2>${right||''}</d
 
 function opRow(o, noDate){
   const tr = o.type==='Перевод';
-  const tag = tr ? '<span class="tag">Перевод</span>' : o.type==='Доход' ? '<span class="tag p">Доход</span>' : `<span class="tag">${esc(o.group)}</span>`;
-  const sub = tr ? (o.wallet+' → '+o.wallet2) : [o.wallet, o.cp].filter(Boolean).join(' · ');
+  const tag = tr ? '<span class="tag">Перевод</span>' : `<span class="tag ${o.type==='Доход'?'p':''}">${esc(payerOf(o))}</span>`;
+  const sub = tr ? (o.wallet+' → '+o.wallet2) : [o.group, o.wallet, o.cp].filter(Boolean).join(' · ');
   const amt = o.type==='Доход' ? money(o.amount,true) : tr ? money(o.amount) : money(-o.amount);
   return `<button class="row tap" data-act="edit" data-v="${esc(o.id)}">
     <span class="ico">${esc(tr ? '⇄' : artIcon(o.group,o.article))}</span>
@@ -689,8 +692,21 @@ function walletBlock(from, to){
 }
 /* ===== Итоги месяца ===== */
 // Цвет группы закреплён за группой (порядок из справочника), не за местом в рейтинге
+// Кто платил: явно указанный плательщик, иначе владелец кошелька
+function people(){ return (D.people && D.people.length) ? D.people : uniq(D.wallets.map(w=>w.owner).filter(Boolean)); }
+function payerOf(o){ if (o.payer) return o.payer; const w = walOf(o.wallet); return (w && w.owner) || o.author || '—'; }
+function myPerson(){
+  const ps = people(), u = D.user || {};
+  if (u.group && ps.indexOf(u.group)>=0) return u.group;
+  return ps.find(p => p && u.name && u.name.toLowerCase().indexOf(p.toLowerCase())>=0) || '';
+}
+function defaultPayer(wallet){
+  const w = walOf(wallet), own = w && w.owner, ps = people();
+  if (own && !/общ/i.test(own)) return own;
+  return myPerson() || own || ps[0] || '';
+}
 function groupColor(g){
-  const order = uniq(D.articles.map(a=>a.group));
+  const order = uniq(D.articles.map(a=>a.group).concat(people()));
   const i = order.indexOf(g);
   return i>=0 && i<6 ? `var(--c${i+1})` : 'var(--c0)';
 }
@@ -707,6 +723,8 @@ function monthReport(m){
   const grp = agg(exp, o=>o.group), grpPrev = agg(prevExp, o=>o.group);
   const order = uniq(D.articles.map(a=>a.group).concat(Object.keys(grp)));
   const byGroup = order.filter(g=>grp[g]).map(g => ({ g, v:grp[g], prev:grpPrev[g]||0 }));
+  const pay = agg(exp, o=>payerOf(o)), payPrev = agg(prevExp, o=>payerOf(o));
+  const byPayer = uniq(people().concat(Object.keys(pay))).filter(x=>pay[x]).map(g => ({ g, v:pay[g], prev:payPrev[g]||0 })).sort((a,b)=>b.v-a.v);
   const wal = agg(exp, o=>o.wallet);
   const byWallet = Object.keys(wal).map(w => ({ w, v:wal[w], icon:(walOf(w)||{}).icon||'💳', owner:(walOf(w)||{}).owner||'' })).sort((x,y)=>y.v-x.v);
   const isCur = m===today().slice(0,7);
@@ -714,7 +732,7 @@ function monthReport(m){
   const days = isCur ? new Date().getDate() : (m > today().slice(0,7) ? 0 : dim);
   const top = exp.slice().sort((a,b)=>b.amount-a.amount).slice(0,5);
   const cmp = curM ? `1–${dayCut} ${MONTHS_GEN[+pm.slice(5,7)-1]}` : MONTHS[+pm.slice(5,7)-1];
-  return { m, pm, total, prevTotal, inc, byArt, byGroup, byWallet, days, top, count:exp.length, cmp, partial:curM };
+  return { m, pm, total, prevTotal, inc, byArt, byGroup, byPayer, byWallet, days, top, count:exp.length, cmp, partial:curM };
 }
 const deltaTxt = (v, prev) => !prev ? (v ? 'новое' : '') : (v===prev ? 'как в прошлом' : (v>prev ? '▲ ' : '▼ ') + nf.format(Math.round(Math.abs(v-prev))) + ' ₽');
 function segbar(list){
@@ -730,8 +748,9 @@ function summaryPanel(){
   <button class="panel gl tap" data-act="report" style="display:block;width:100%;text-align:left">
     <div class="spl"><span class="t2" style="font-size:13px;font-weight:500">Потрачено</span><span class="t2" style="font-size:12.5px">${r.prevTotal ? (r.total>r.prevTotal?'▲ ':'▼ ') + Math.abs(Math.round((r.total-r.prevTotal)/r.prevTotal*100)) + '% к ' + (r.partial ? 'тем же дням ' + MONTHS_GEN[(mi+11)%12] : MONTHS_DAT[(mi+11)%12]) : ''}</span></div>
     <div style="font-size:28px;font-weight:300;letter-spacing:-.035em;margin:2px 0 10px" class="num">${money(t)}</div>
-    ${segbar(r.byGroup)}
-    <div class="legs">${r.byGroup.map(x=>`<span><i style="background:${groupColor(x.g)}"></i>${esc(x.g)} · ${nf.format(Math.round(x.v))} ₽</span>`).join('')}</div>
+    <div class="t2" style="font-size:12px;margin-bottom:4px">Кто платил</div>
+    ${segbar(r.byPayer)}
+    <div class="legs">${r.byPayer.map(x=>`<span><i style="background:${groupColor(x.g)}"></i>${esc(x.g)} · ${nf.format(Math.round(x.v))} ₽</span>`).join('')}</div>
     <div style="margin-top:12px">${r.byArt.slice(0,3).map((x,i)=>`<div class="leg"><span>${esc(x.icon)}</span><span class="nm">${esc(x.a)} <span class="t2" style="font-size:12px">· ${esc(x.g)}</span></span><span class="am">${money(x.v)}</span><span class="pc">${Math.round(x.v/t*100)}%</span></div>`).join('')}</div>
   </button>`;
 }
@@ -749,7 +768,10 @@ function updReport(){
   if (!r.total){ $('#repBody').innerHTML = `<div class="ask"><div class="q">В ${MONTHS_PREP[mi]} расходов нет</div><div class="hint">Как только появятся операции, здесь будет сводка.</div></div>`; return; }
   const saved = r.inc - r.total;
   const by = S.repBy;
-  const rows = by==='wal'
+  const rows = by==='grp'
+    ? r.byGroup.map(x => `<div class="row rk"><span class="ico">${esc(groupIcon(x.g))}</span><span class="m"><div class="spl"><span class="t"><span class="n">${esc(x.g)}</span></span><b class="num" style="font-weight:600">${money(x.v)}</b></div>
+        <div class="spl"><span class="s">${Math.round(x.v/t*100)}% всех расходов</span><span class="dl">${esc(deltaTxt(x.v, x.prev))}</span></div><div class="bar"><i style="width:${x.v/Math.max(...r.byGroup.map(y=>y.v))*100}%"></i></div></span></div>`).join('')
+    : by==='wal'
     ? r.byWallet.map(x => `<div class="row rk"><span class="ico">${esc(x.icon)}</span><span class="m"><div class="spl"><span class="t"><span class="n">${esc(x.w)}</span></span><b class="num" style="font-weight:600">${money(x.v)}</b></div>
         <div class="spl"><span class="s">${esc(x.owner)}</span><span class="dl">${Math.round(x.v/t*100)}%</span></div><div class="bar"><i style="width:${x.v/r.byWallet[0].v*100}%"></i></div></span></div>`).join('')
     : r.byArt.map(x => `<div class="row rk"><span class="ico">${esc(x.icon)}</span><span class="m"><div class="spl"><span class="t"><span class="n">${esc(x.a)}</span></span><b class="num" style="font-weight:600">${money(x.v)}</b></div>
@@ -765,17 +787,18 @@ function updReport(){
       <div class="tile gl"><div class="k">${saved>=0?'Отложено':'Не хватило'}</div><div class="v ${saved<0?'neg':''}">${money(Math.abs(saved))}</div></div>
       <div class="tile gl"><div class="k">В день</div><div class="v">${r.days ? money(Math.round(r.total/r.days)) : '—'}</div></div>
     </div>
-    <div class="gh">Кто сколько потратил (по группам)</div>
+    <div class="gh">Кто сколько заплатил</div>
     <div class="box gl" style="padding:14px 16px 8px">
-      ${segbar(r.byGroup)}
-      <div style="margin-top:8px">${r.byGroup.map(x=>`<div class="leg"><span class="sw2" style="background:${groupColor(x.g)}"></span><span class="nm">${esc(x.g)}</span><span class="am">${money(x.v)}</span><span class="pc">${Math.round(x.v/t*100)}%</span></div>`).join('')}</div>
+      ${segbar(r.byPayer)}
+      <div style="margin-top:8px">${r.byPayer.map(x=>`<div class="leg"><span class="sw2" style="background:${groupColor(x.g)}"></span><span class="nm">${esc(x.g)}</span><span class="am">${money(x.v)}</span><span class="pc">${Math.round(x.v/t*100)}%</span></div>`).join('')}</div>
     </div>
+    <div class="gf">По полю «Кто платил» в операции. Если оно пустое — по владельцу кошелька.</div>
     <div class="gh">На что потратили</div>
-    <div class="seg gl">${[['art','По статьям'],['wal','По кошелькам']].map(([v,l])=>`<button class="${by===v?'on':''}" data-act="repby" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="seg gl">${[['art','Статьи'],['grp','Группы'],['wal','Кошельки']].map(([v,l])=>`<button class="${by===v?'on':''}" data-act="repby" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="box gl" style="margin-top:10px">${rows}</div>
-    <div class="gf">${by==='art' ? 'Справа — изменение по каждой статье к ' + (r.partial ? 'тем же дням ' + MONTHS_GEN[pmi] : MONTHS_DAT[pmi]) + '.' : 'Сколько ушло с каждого кошелька — видно, кто фактически платил.'}</div>
+    <div class="gf">${by==='art' ? 'Справа — изменение по каждой статье к ' + (r.partial ? 'тем же дням ' + MONTHS_GEN[pmi] : MONTHS_DAT[pmi]) + '.' : (by==='grp' ? 'Группы статей — разделы бюджета; кто платил — выше.' : 'Сколько ушло с каждого кошелька.')}</div>
     <div class="gh">Крупные траты</div>
-    <div class="box gl">${r.top.map(o=>`<div class="row"><span class="ico">${esc(artIcon(o.group,o.article))}</span><span class="m"><div class="t"><span class="n">${esc(o.article)}</span></div><div class="s">${esc(dLabel(o.date))} · ${esc(o.wallet)}${o.cp?' · '+esc(o.cp):''}</div></span><span class="a"><b>${money(o.amount)}</b></span></div>`).join('')}</div>
+    <div class="box gl">${r.top.map(o=>`<div class="row"><span class="ico">${esc(artIcon(o.group,o.article))}</span><span class="m"><div class="t"><span class="n">${esc(o.article)}</span></div><div class="s">${esc(dLabel(o.date))} · ${esc(payerOf(o))} · ${esc(o.wallet)}${o.cp?' · '+esc(o.cp):''}</div></span><span class="a"><b>${money(o.amount)}</b></span></div>`).join('')}</div>
     <div class="gf" style="text-align:center;margin-top:14px">${r.count} ${plural(r.count,'расход','расхода','расходов')} за ${r.days} ${plural(r.days,'день','дня','дней')}</div>`;
 }
 function groupIcon(g){ return /общ/i.test(g) ? '👪' : /люс|жен|мам/i.test(g) ? '👩' : /кир|муж|пап/i.test(g) ? '👨' : '👤'; }
@@ -843,7 +866,9 @@ function openOp(op, type){
   if (!D) return;
   mode = 'op';
   F = op ? { ...op, amount: String(op.amount).replace('.',',') }
-         : { id:null, type: type||'Расход', amount:'', group:'', article:'', wallet: defaultWallet(), wallet2:'', date: today(), cp:'', comment:'' };
+         : { id:null, type: type||'Расход', amount:'', group:'', article:'', wallet: defaultWallet(), wallet2:'', date: today(), cp:'', comment:'', payer:'' };
+  if (!F.payer) F.payer = op ? payerOf(op) : defaultPayer(F.wallet);
+  F.payerManual = !!(op && op.payer);
   if (!op && S.month !== today().slice(0,7)) F.date = S.month + '-01';
   openSheet('', op ? 'Сохранить' : 'Добавить', `
     <div class="seg gl" id="fType">${['Расход','Доход','Перевод'].map(t=>`<button data-act="ftype" data-v="${t}">${t}</button>`).join('')}</div>
@@ -892,6 +917,8 @@ function updOp(){
     html += '<div class="info" id="fArtInfo" hidden></div>';
     html += row('pick-wal', t==='Доход' ? 'Зачислить на' : 'Кошелёк', w1 ? esc((w1.icon||'💳')+' '+w1.name) : '', 'Выбрать');
     html += '<div class="info" id="fWalInfo" hidden></div>';
+    const ps = uniq(people().concat(F.payer ? [F.payer] : []));
+    html += `<div class="fr"><span class="k">${t==='Доход'?'Кто получил':'Кто платил'}</span><span class="pchips">${ps.map(x=>`<button class="chip ${x===F.payer?'on':''}" data-act="fpayer" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</span></div>`;
   } else {
     html += row('pick-wal','Откуда', w1 ? esc((w1.icon||'💳')+' '+w1.name) : '', 'Выбрать');
     html += '<div class="info" id="fWalInfo" hidden></div>';
@@ -940,7 +967,7 @@ function updInfo(){ // живые подсказки: бюджет статьи 
   if (!F.wallet) need.push('кошелёк');
   $('#fHint').textContent = need.length
     ? (need[0]==='сумму' && need.length>1 ? 'Введите сумму и выберите ' + need.slice(1).join(', ') : need[0]==='сумму' ? 'Введите сумму' : 'Выберите ' + need.join(', '))
-    : (t==='Перевод' ? `${F.wallet} → ${F.wallet2}` : `${F.article} · ${F.wallet}`) + ' · ' + dLabel(F.date).toLowerCase();
+    : (t==='Перевод' ? `${F.wallet} → ${F.wallet2}` : `${F.article} · ${F.payer ? (t==='Доход'?'получил(а) ':'платил(а) ') + F.payer + ' · ' : ''}${F.wallet}`) + ' · ' + dLabel(F.date).toLowerCase();
   $('#shDone').disabled = need.length > 0 || S.saving;
 }
 function pickArticle(){
@@ -993,7 +1020,7 @@ async function saveOp(){
   if (tr){ if (!F.wallet2 || F.wallet2===F.wallet) return fail('Выберите, куда перевести'); }
   else if (!F.article) return fail('Выберите статью');
   if (!F.wallet) return fail('Выберите кошелёк');
-  const op = { id:F.id, type:F.type, amount, date:F.date, wallet:F.wallet, wallet2: tr?F.wallet2:'', group: tr?'':F.group, article: tr?'':F.article, cp:F.cp, comment:F.comment };
+  const op = { id:F.id, type:F.type, amount, date:F.date, wallet:F.wallet, wallet2: tr?F.wallet2:'', group: tr?'':F.group, article: tr?'':F.article, cp:F.cp, comment:F.comment, payer: tr?'':(F.payer||'') };
   await busy(async () => {
     const res = await api(F.id ? 'update' : 'add', { op });
     res._t = Date.now();
@@ -1338,7 +1365,8 @@ document.addEventListener('click', e => {
     case 'pick-wal': pickWallet(1); break;
     case 'pick-wal2': pickWallet(2); break;
     case 'set-art': F.group = el.dataset.g; F.article = v; haptic(); popPage(); updOp(); break;
-    case 'set-wal': if (el.dataset.w==='2') F.wallet2 = v; else { F.wallet = v; if (F.wallet2===v) F.wallet2=''; } haptic(); popPage(); updOp(); break;
+    case 'set-wal': if (el.dataset.w==='2') F.wallet2 = v; else { F.wallet = v; if (F.wallet2===v) F.wallet2=''; if (!F.payerManual) F.payer = defaultPayer(v); } haptic(); popPage(); updOp(); break;
+    case 'fpayer': F.payer = v; F.payerManual = true; updOp(); haptic(); break;
     case 'wicon': F.icon = v; F._upd(); haptic(); break;
     case 'wowner': F.owner = v; F._upd(); haptic(); break;
     case 'retry': start(); break;
@@ -1466,7 +1494,7 @@ function demoData(){
   [mAdd(cur,-2),prev,cur,mAdd(cur,1)].forEach(m => { budget[m] = {}; A.forEach(a=>{ if (a[4]) budget[m][akey(a[0],a[1])] = a[4]; }); });
   let seed = 7; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
   const ops = []; let n = 0;
-  const add = (date,type,g,a,amount,wallet,cp,wallet2) => ops.push({id:'d'+(n++),date,type,group:g||'',article:a||'',amount:Math.round(amount),wallet,wallet2:wallet2||'',cp:cp||'',comment:'',author:'Демо'});
+  const add = (date,type,g,a,amount,wallet,cp,wallet2,payer) => ops.push({id:'d'+(n++),date,type,group:g||'',article:a||'',amount:Math.round(amount),wallet,wallet2:wallet2||'',cp:cp||'',comment:'',author:'Демо',payer:payer||''});
   const td = new Date();
   [prev,cur].forEach(m => {
     const days = m===cur ? td.getDate() : new Date(+m.slice(0,4), +m.slice(5,7), 0).getDate();
@@ -1476,7 +1504,7 @@ function demoData(){
     add(d(3),'Перевод','','',10000,'Карта Кирилла','','Наличные');
     add(d(12),'Расход','Общие','Коммуналка',5400,'Карта Кирилла','Мосэнергосбыт');
     add(d(2),'Расход','Кирилл','ИИ Подписки',3900,'Карта Кирилла','Anthropic');
-    add(d(4),'Расход','Кирилл','Интернет',1600,'Карта Кирилла','Ростелеком');
+    add(d(4),'Расход','Кирилл','Интернет',1600,'Карта Люси','Ростелеком','','Люся');
     add(d(6),'Расход','Люся','Ногти',2500,'Карта Люси');
     add(d(9),'Расход','Люся','Пилатес',4000,'Карта Люси','Студия');
     add(d(8),'Расход','Люся','Бобик',3200,'Карта Люси','Зоомагазин');
@@ -1485,7 +1513,7 @@ function demoData(){
     for (let k=1; k<=days; k+=3) add(d(k),'Расход','Люся','Обеды',350+rnd()*500,'Карта Люси');
     if (days>14) add(d(15),'Расход','Общие','Развлечения',3800,'Наличные','Кино');
   });
-  return { user:{id:1,name:'Кирилл',group:'',wallet:''}, articles, wallets, counterparties:['Пятёрочка','ВкусВилл','Кофейня','Ростелеком','Мосэнергосбыт'], budget, months:Object.keys(budget).sort(), ops };
+  return { user:{id:1,name:'Кирилл',group:'',wallet:''}, articles, wallets, counterparties:['Пятёрочка','ВкусВилл','Кофейня','Ростелеком','Мосэнергосбыт'], budget, months:Object.keys(budget).sort(), people:['Кирилл','Люся','Общие'], ops };
 }
 start();
 </script>
