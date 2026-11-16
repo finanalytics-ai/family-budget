@@ -12,7 +12,7 @@
 const DEFAULT_APP_URL = 'https://finanalytics-ai.github.io/family-budget/';
 
 // Версия кода — видна в меню и после «Обновить отчёты». Если видите другую — в Apps Script остался старый код.
-const SCRIPT_VERSION = '1.7 (16.11.2026)';
+const SCRIPT_VERSION = '1.8 (16.11.2026)';
 
 const SH = {
   J: 'Журнал', BAL: 'Остатки', PF: 'План-факт', ODDS: 'ОДДС', B: 'Бюджет',
@@ -482,6 +482,8 @@ function doPost(e) {
       case 'saveWallet': withLock_(() => saveWallet_(ss, p.wallet, p.oldName)); data = apiLoad_(ss, user); break;
       case 'setPlan': withLock_(() => setPlan_(ss, p)); data = apiLoad_(ss, user); break;
       case 'addArticle': withLock_(() => addArticle_(ss, p)); data = apiLoad_(ss, user); break;
+      case 'updateArticle': withLock_(() => updateArticle_(ss, p)); data = apiLoad_(ss, user); break;
+      case 'deleteArticle': withLock_(() => deleteArticle_(ss, p)); data = apiLoad_(ss, user); break;
       case 'copyPlan': withLock_(() => copyPlan_(ss, p.from, p.to)); data = apiLoad_(ss, user); break;
       default: throw new Error('Неизвестное действие');
     }
@@ -701,6 +703,62 @@ function addArticle_(ss, p) {
   sh.getRange(r, 1, 1, 5).setValues([[group, name, x.type, String(x.icon || '•'), true]]);
   syncBudgetRows_(ss);
   if (p.months && p.months.length && Number(p.amount) > 0) setPlan_(ss, { group, article: name, amount: p.amount, months: p.months }, true);
+  rebuildReports(true);
+}
+
+function articleRow_(ss, group, name) {
+  const sh = ss.getSheetByName(SH.ART);
+  const n = sh.getLastRow() - 1;
+  if (n < 1) return 0;
+  const v = sh.getRange(2, 1, n, 2).getValues();
+  for (let i = 0; i < v.length; i++) if (String(v[i][0]).trim() === group && String(v[i][1]).trim() === name) return i + 2;
+  return 0;
+}
+
+function articleOpsCount_(ss, group, name) {
+  const sh = ss.getSheetByName(SH.J);
+  const n = sh.getLastRow() - 1;
+  if (n < 1) return 0;
+  return sh.getRange(2, 7, n, 2).getValues().filter(r => String(r[0]).trim() === group && String(r[1]).trim() === name).length;
+}
+
+/** p: {old:{group,name}, article:{group,name,icon,active}} — переименование тянется в «Бюджет» и «Журнал». */
+function updateArticle_(ss, p) {
+  const o = p.old || {}, x = p.article || {};
+  const row = articleRow_(ss, o.group, o.name);
+  if (!row) throw new Error('Статья не найдена: ' + o.group + ' / ' + o.name);
+  const group = safeText_(String(x.group || '').trim().slice(0, 40)), name = safeText_(String(x.name || '').trim().slice(0, 60));
+  if (!group || !name) throw new Error('Укажите группу и название статьи');
+  const renamed = group !== o.group || name !== o.name;
+  if (renamed && readArticles_(ss).some(a => a.group.toLowerCase() === group.toLowerCase() && a.name.toLowerCase() === name.toLowerCase() &&
+      !(a.group === o.group && a.name === o.name))) throw new Error('Статья «' + name + '» в группе «' + group + '» уже есть');
+  const sh = ss.getSheetByName(SH.ART);
+  sh.getRange(row, 1, 1, 2).setValues([[group, name]]);
+  sh.getRange(row, 4).setValue(String(x.icon || '•'));
+  sh.getRange(row, 5).setValue(x.active !== false);
+  if (renamed) {
+    const br = budgetRow_(ss, o.group, o.name);
+    if (br) ss.getSheetByName(SH.B).getRange(br, 1, 1, 2).setValues([[group, name]]);
+    const j = ss.getSheetByName(SH.J), n = j.getLastRow() - 1;
+    if (n > 0) {
+      const rg = j.getRange(2, 7, n, 2), v = rg.getValues();
+      let ch = false;
+      v.forEach(r => { if (String(r[0]).trim() === o.group && String(r[1]).trim() === o.name) { r[0] = group; r[1] = name; ch = true; } });
+      if (ch) rg.setValues(v);
+    }
+    rebuildReports(true);
+  }
+}
+
+/** Удаляет статью без операций (строки в «Статьях» и «Бюджете»). */
+function deleteArticle_(ss, p) {
+  const row = articleRow_(ss, p.group, p.name);
+  if (!row) throw new Error('Статья не найдена');
+  const n = articleOpsCount_(ss, p.group, p.name);
+  if (n) throw new Error('По статье есть операции (' + n + '). Удалить нельзя — скройте статью или перенесите операции.');
+  ss.getSheetByName(SH.ART).deleteRow(row);
+  const br = budgetRow_(ss, p.group, p.name);
+  if (br) ss.getSheetByName(SH.B).deleteRow(br);
   rebuildReports(true);
 }
 

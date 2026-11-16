@@ -28,6 +28,7 @@
   --bar:rgba(255,255,255,.1); --dock:rgba(16,26,44,.62); --scrim:rgba(0,0,0,.45);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
 html{background:var(--base)}
 html,body{margin:0;color:var(--text);font:15px/1.4 var(--font);letter-spacing:-.011em;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
 body{min-height:100vh;padding-bottom:calc(200px + env(safe-area-inset-bottom));position:relative}
@@ -220,6 +221,17 @@ details[open] .disc{transform:rotate(90deg)}
 .emojis{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;padding:10px}
 .emojis button{height:44px;border-radius:14px;font-size:22px;display:grid;place-items:center;text-align:center}
 .emojis button.on{background:var(--glass2);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.icons{padding:2px 0 6px}
+.icons .ich{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);padding:12px 14px 0}
+.icons .emojis{grid-template-columns:repeat(7,1fr);gap:2px;padding:6px 8px 0}
+.icons .emojis button{height:42px;font-size:22px}
+.search{display:flex;align-items:center;gap:8px;height:44px;padding:0 14px;border-radius:14px;margin-top:10px}
+.search svg{width:16px;height:16px;color:var(--text2);flex:0 0 auto}
+.search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:16px;color:var(--text)}
+.search input::placeholder{color:var(--text3)}
+.fchips{display:flex;gap:6px;overflow-x:auto;margin:10px -18px 0;padding:0 18px;scrollbar-width:none}
+.fchips::-webkit-scrollbar{display:none}
+.fchips .chip{height:32px;font-size:13px;padding:0 12px}
 .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .ask input.nameinp,.nameinp{border:0;outline:0;background:transparent;font-size:25px;line-height:1.3;font-weight:300;letter-spacing:-.02em;text-align:center;width:100%;max-width:none;color:var(--text);padding:0}
 .nameinp::placeholder{color:var(--text3)}
@@ -334,6 +346,36 @@ const akey = (g,a) => g+'|'+a;
 const DISC = '<svg class="disc" viewBox="0 0 7 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1 1 5 5-5 5"/></svg>';
 const CHECK = '<svg class="check" viewBox="0 0 16 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 7 6 11.5 14.5 1.5"/></svg>';
 const WALLET_ICONS = ['💳','🏦','💵','💰','🪙','🐷','📈','💎','🏠','🚗','✈️','🎁'];
+// Большой набор иконок по категориям (через пробел — чтобы составные эмодзи не разваливались)
+const ICON_SETS = [
+  ['Еда и продукты', '🛒 🥦 🍎 🥕 🥩 🍗 🐟 🍞 🧀 🥛 🥚 🍝 🍕 🍔 🌮 🍣 🍜 🥗 🍱 🍰 🍫 🍦 ☕ 🍵 🥤 🍷 🍺 🥂'],
+  ['Дом и быт', '🏠 🏡 🛋️ 🛏️ 🚿 🧹 🧺 🧴 🧻 🧼 🪴 💡 🔌 🔥 💧 🔧 🪛 🔨 🧰 🔑 📦'],
+  ['Транспорт', '🚗 🚙 ⛽ 🛞 🅿️ 🚕 🚌 🚇 🚆 🚲 🛴 ✈️ 🚢 🗺️'],
+  ['Здоровье и красота', '💊 🏥 🩺 🦷 💉 🩹 👓 🧘‍♀️ 🏋️ 🏃‍♀️ 🏊 💅 💄 💇‍♀️ 🧖‍♀️ ✨ 🌸 🧴 🪒'],
+  ['Дети и питомцы', '👶 🍼 🧸 🎒 ✏️ 📚 🎓 🏫 🎠 🐶 🐱 🐾 🦴 🐠 🐦'],
+  ['Одежда и покупки', '👕 👗 👖 🧥 👟 👠 👜 🎒 💍 ⌚ 🕶️ 🛍️ 🎁 🧦'],
+  ['Досуг и отдых', '🎉 🎂 🎬 🎭 🎟️ 🎮 🎵 🎧 🎨 📷 🏖️ ⛺ 🏔️ ⚽ 🎳 🎣 📖 🧩'],
+  ['Связь и подписки', '📱 📞 🌐 💻 📺 🤖 ☁️ 📰 🎞️ 💾 🔐'],
+  ['Работа и финансы', '💼 💰 💵 💶 💳 🏦 📈 📉 🪙 🧾 💸 🐷 🏛️ 📊 🤝 🏢'],
+  ['Разное', '❤️ ⭐ 🔔 📌 🗂️ 🛠️ 🙏 🎗️ 🌍 ⚖️ 🚬 🍀 ❓ •']
+].map(([t, s]) => [t, s.split(' ')]);
+function iconGrid(cur, act){
+  const all = ICON_SETS.flatMap(x=>x[1]);
+  const extra = cur && all.indexOf(cur)<0 ? `<div class="ich">Выбрано</div><div class="emojis"><button class="on" data-act="${act}" data-v="${esc(cur)}">${esc(cur)}</button></div>` : '';
+  return extra + ICON_SETS.map(([t, list]) => `<div class="ich">${esc(t)}</div><div class="emojis">${list.map(i=>`<button class="${i===cur?'on':''}" data-act="${act}" data-v="${esc(i)}">${esc(i)}</button>`).join('')}</div>`).join('');
+}
+// поле «свой смайлик»: берём первый символ-графему из того, что вставили
+function firstGrapheme(s){
+  s = String(s||'').trim(); if (!s) return '';
+  try { if (window.Intl && Intl.Segmenter) return [...new Intl.Segmenter().segment(s)][0].segment; } catch(e){}
+  return Array.from(s)[0];
+}
+const customIconRow = act => `<div class="box gl" style="margin-top:10px"><div class="fr"><span class="k">Свой смайлик</span><input class="txt" data-custom="${act}" placeholder="вставьте любой 😊" autocomplete="off" maxlength="16"></div></div>`;
+document.addEventListener('input', e => {
+  const act = e.target.dataset && e.target.dataset.custom; if (!act || !F) return;
+  const g = firstGrapheme(e.target.value); if (!g) return;
+  F.icon = g; if (F._upd) F._upd(); else refreshArt();
+});
 const ASK = { 'Расход':'Сколько потратили?', 'Доход':'Сколько получили?', 'Перевод':'Сколько переводим?' };
 const STATUS = { 'Расход':'Новый расход', 'Доход':'Новый доход', 'Перевод':'Новый перевод' };
 
@@ -506,9 +548,12 @@ function viewHome(){
 
 function viewOps(){
   let ops = opsOfMonth(S.month);
-  const f = S.opsFilter;
+  const f = S.opsFilter, w = S.opsWallet || '';
   if (f!=='all') ops = ops.filter(o=>o.type===f);
-  const seg = `<div class="seg gl">${[['all','Все'],['Расход','Расходы'],['Доход','Доходы'],['Перевод','Переводы']].map(([v,l])=>`<button class="${f===v?'on':''}" data-act="opsf" data-v="${v}">${l}</button>`).join('')}</div>`;
+  if (w) ops = ops.filter(o=>o.wallet===w || o.wallet2===w);
+  const wl = D.wallets.filter(x=>x.active || opsOfMonth(S.month).some(o=>o.wallet===x.name||o.wallet2===x.name));
+  const seg = `<div class="seg gl">${[['all','Все'],['Расход','Расходы'],['Доход','Доходы'],['Перевод','Переводы']].map(([v,l])=>`<button class="${f===v?'on':''}" data-act="opsf" data-v="${v}">${l}</button>`).join('')}</div>` +
+    (wl.length>1 ? `<div class="fchips"><button class="chip gl ${!w?'on':''}" data-act="opsw" data-v="">Все кошельки</button>${wl.map(x=>`<button class="chip gl ${w===x.name?'on':''}" data-act="opsw" data-v="${esc(x.name)}">${esc(x.icon||'💳')} ${esc(x.name)}</button>`).join('')}</div>` : '');
   if (!ops.length) return seg + `<div class="empty">Нет операций за ${esc(mLabel(S.month))}</div>`;
   const byDay = {};
   sortOps(ops).forEach(o => (byDay[o.date] = byDay[o.date] || []).push(o));
@@ -534,6 +579,7 @@ function viewPF(){
   const empty = !Object.keys(D.budget[S.month]||{}).length, canCopy = Object.keys(D.budget[prev]||{}).length > 0;
   const actions = `<div class="acts">
     <button class="chip gl" data-act="art-new">＋ Новая статья</button>
+    ${D.articles.some(a=>a.type===t && !a.active) ? `<button class="chip gl" data-act="art-hidden">Скрытые (${D.articles.filter(a=>a.type===t && !a.active).length})</button>` : ''}
     ${canCopy ? `<button class="chip gl" data-act="plan-copy">⧉ Взять план ${MONTHS_GEN[+prev.slice(5,7)-1]}</button>` : ''}
   </div>
   <div class="gf" style="margin:8px 4px 0">${empty && canCopy ? `План на ${MONTHS[+S.month.slice(5,7)-1]} пуст — возьмите его из прошлого месяца или задайте по статьям.` : 'Нажмите на статью, чтобы изменить план.'}</div>`;
@@ -552,7 +598,9 @@ function viewPF(){
 function viewOdds(){
   const [from,to] = oddsRange();
   const r = odds(from,to);
-  const seg = `<div class="seg gl">${[['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].map(([v,l])=>`<button class="${S.odds===v?'on':''}" data-act="odds" data-v="${v}">${l}</button>`).join('')}</div>`;
+  const by = S.oddsBy || 'art';
+  const seg = `<div class="seg gl">${[['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].map(([v,l])=>`<button class="${S.odds===v?'on':''}" data-act="odds" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="seg gl" style="margin-top:8px">${[['art','По статьям'],['wal','По кошелькам']].map(([v,l])=>`<button class="${by===v?'on':''}" data-act="oddsby" data-v="${v}">${l}</button>`).join('')}</div>`;
   const block = list => list.length ? '<div class="list gl">' + list.map(g => `<details><summary class="row tap"><span class="ico">${esc(groupIcon(g.group))}</span><span class="m"><div class="t"><span class="n">${esc(g.group)}</span></div><div class="s">${g.items.length} ${plural(g.items.length,'статья','статьи','статей')}</div></span><span class="a"><b>${money(g.total)}</b></span>${DISC}</summary>
       <div class="subrows">${g.items.map(i=>`<div class="kv"><span>${esc(artIcon(g.group,i.a))}&ensp;${esc(i.a)}</span><span class="num">${money(i.v)}</span></div>`).join('')}</div></details>`).join('') + '</div>'
     : '<div class="empty" style="padding:14px">Нет операций</div>';
@@ -564,8 +612,9 @@ function viewOdds(){
     <div class="kv"><span class="t2">Чистый поток</span><b class="${r.net<0?'neg':''}">${money(r.net,true)}</b></div>
     <div class="kv" style="border-top:1px solid var(--sep);margin-top:6px;padding-top:12px"><span style="font-weight:500">Остаток на конец</span><b style="font-size:22px;font-weight:300;letter-spacing:-.03em">${money(r.end)}</b></div>
   </div>
+  ` + (by==='wal' ? walletBlock(from, to) : `
   ${sec('Поступления', `<span class="v num">${money(r.tIn)}</span>`)}${block(r.inL)}
-  ${sec('Выбытия', `<span class="v num">${money(r.tEx)}</span>`)}${block(r.exL)}`;
+  ${sec('Выбытия', `<span class="v num">${money(r.tEx)}</span>`)}${block(r.exL)}`);
   if (r.months.length > 1){
     html += sec('По месяцам') + `<div class="panel gl" style="padding:10px 12px"><div class="tbl"><table>
       <tr><th></th>${r.months.map(m=>`<th>${esc(mShort(m.k))}</th>`).join('')}</tr>
@@ -577,6 +626,42 @@ function viewOdds(){
     </table></div></div>`;
   }
   return html;
+}
+// ОДДС по кошелькам: кто и с какого счёта платил
+function walletOdds(from, to){
+  const W = {};
+  D.wallets.forEach(w => W[w.name] = { w, start: w.initial||0, inc:0, exp:0, tin:0, tout:0, arts:{}, incArts:{} });
+  const get = n => W[n] || (W[n] = { w:{ name:n, icon:'💳', owner:'' }, start:0, inc:0, exp:0, tin:0, tout:0, arts:{}, incArts:{} });
+  D.ops.forEach(o => {
+    const mk = o.date.slice(0,7);
+    if (mk > to) return;
+    const before = mk < from;
+    const a = get(o.wallet);
+    if (o.type==='Доход'){ if (before) a.start += o.amount; else { a.inc += o.amount; const k = o.article+' · '+o.group; a.incArts[k] = (a.incArts[k]||0) + o.amount; } }
+    else if (o.type==='Расход'){ if (before) a.start -= o.amount; else { a.exp += o.amount; const k = o.article+'|'+o.group; a.arts[k] = (a.arts[k]||0) + o.amount; } }
+    else { const b = get(o.wallet2); if (before){ a.start -= o.amount; b.start += o.amount; } else { a.tout += o.amount; b.tin += o.amount; } }
+  });
+  return Object.values(W).map(x => ({ ...x, end: x.start + x.inc - x.exp + x.tin - x.tout }))
+    .filter(x => x.w.active!==false || x.inc || x.exp || x.tin || x.tout || Math.abs(x.end)>0.004);
+}
+function walletBlock(from, to){
+  const list = walletOdds(from, to);
+  if (!list.length) return '<div class="empty">Кошельков нет</div>';
+  return sec('Кошельки', '<span class="v">кто и откуда платил</span>') + '<div class="list gl">' + list.map(x => {
+    const top = Object.entries(x.arts).sort((a,b)=>b[1]-a[1]);
+    return `<details><summary class="row tap"><span class="ico">${esc(x.w.icon||'💳')}</span>
+      <span class="m"><div class="t"><span class="n">${esc(x.w.name)}</span></div><div class="s">${x.w.owner ? esc(x.w.owner)+' · ' : ''}${x.inc?'+'+nf.format(Math.round(x.inc))+' · ':''}−${nf.format(Math.round(x.exp))}</div></span>
+      <span class="a"><b>${money(x.end)}</b></span>${DISC}</summary>
+      <div class="subrows" style="padding-left:66px">
+        <div class="kv"><span>Остаток на начало</span><span class="num">${money(x.start)}</span></div>
+        <div class="kv"><span>Поступления</span><span class="num pos">${money(x.inc,true)}</span></div>
+        <div class="kv"><span>Расходы</span><span class="num">${money(-x.exp)}</span></div>
+        ${x.tin||x.tout ? `<div class="kv"><span>Переводы</span><span class="num">${x.tin?'+'+nf.format(x.tin):''}${x.tin&&x.tout?' / ':''}${x.tout?'−'+nf.format(x.tout):''} ₽</span></div>` : ''}
+        <div class="kv" style="color:var(--text);font-weight:600"><span>Остаток на конец</span><span class="num">${money(x.end)}</span></div>
+        ${top.length ? `<div class="kv" style="padding-top:12px;font-weight:600;color:var(--text)"><span>Потрачено с этого кошелька</span><span></span></div>` +
+          top.map(([k,v]) => { const [a,g] = k.split('|'); return `<div class="kv"><span>${esc(artIcon(g,a))}&ensp;${esc(a)} <span style="opacity:.6">· ${esc(g)}</span></span><span class="num">${money(v)}</span></div>`; }).join('') : ''}
+      </div></details>`;
+  }).join('') + '</div>';
 }
 function groupIcon(g){ return /общ/i.test(g) ? '👪' : /люс|жен|мам/i.test(g) ? '👩' : /кир|муж|пап/i.test(g) ? '👨' : '👤'; }
 
@@ -661,7 +746,8 @@ function openOp(op, type){
       <div class="fr"><span class="k">Комментарий</span><input class="txt" id="fComment" placeholder="Необязательно" autocomplete="off" value="${esc(F.comment||'')}"></div>
     </div>
     <datalist id="cpList">${(D.counterparties||[]).map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
-    ${op ? `<div class="gf" style="text-align:center;margin-top:18px">Добавил(а): ${esc(op.author||'—')}</div>` : ''}`, !!op);
+    ${op ? `<div class="box gl" style="margin-top:24px"><button class="row tap danger" data-act="delete">Удалить операцию</button></div>
+      <div class="gf" style="text-align:center;margin-top:12px">Добавил(а): ${esc(op.author||'—')}</div>` : ''}`, !!op);
   const fit = () => { const a = $('#fAmount'); $('#fMeas').textContent = a.value || a.placeholder; a.style.width = ($('#fMeas').offsetWidth + 8) + 'px'; };
   $('#fAmount').addEventListener('input', () => { F.amount = $('#fAmount').value; fit(); updInfo(); });
   F._fit = fit; fit();
@@ -746,16 +832,28 @@ function pickArticle(){
   const t = F.type, m = F.date.slice(0,7);
   const groups = groupsFor(t);
   if (F.group && groups.indexOf(F.group)<0 && artOf(F.group,F.article)) groups.push(F.group);
-  pushPage('Статья', groups.map(g => {
+  const SEARCH = `<div class="search gl"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg><input id="artQ" type="search" placeholder="Поиск статьи" autocomplete="off"></div>
+    <div class="empty" id="artNone" hidden>Ничего не найдено. Новую статью можно создать на вкладке «План».</div>`;
+  pushPage('Статья', SEARCH + groups.map(g => {
     const arts = D.articles.filter(a=>a.type===t && a.group===g && (a.active || (a.group===F.group && a.name===F.article)));
-    return `<div class="gh">${esc(g)}</div><div class="box gl">${arts.map(a => {
+    return `<div class="artgrp" data-g="${esc(g.toLowerCase())}"><div class="gh">${esc(g)}</div><div class="box gl">${arts.map(a => {
       const plan = planOf(m,g,a.name), fact = factOf(m,g,a.name,t,F.id);
       const info = !plan ? 'без плана' : t==='Расход' ? (plan-fact>=0 ? 'осталось '+money(plan-fact) : '<span class="neg">перерасход '+money(fact-plan)+'</span>') : (fact>=plan ? 'выполнено' : 'ещё '+money(plan-fact));
       const on = a.group===F.group && a.name===F.article;
-      return `<button class="row tap" data-act="set-art" data-g="${esc(g)}" data-v="${esc(a.name)}"><span class="ico">${esc(a.icon||'•')}</span>
+      return `<button class="row tap" data-act="set-art" data-g="${esc(g)}" data-v="${esc(a.name)}" data-q="${esc((a.name+' '+g).toLowerCase())}"><span class="ico">${esc(a.icon||'•')}</span>
         <span class="m"><div class="t"><span class="n">${esc(a.name)}</span></div><div class="s">${info}</div></span>${on ? CHECK : ''}</button>`;
-    }).join('')}</div>`;
+    }).join('')}</div></div>`;
   }).join('') + '<div class="gf" style="margin-top:14px">Новые статьи и план по месяцам — на вкладке «План».</div>');
+  $('#artQ').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    let any = false;
+    document.querySelectorAll('#subBody .artgrp').forEach(gr => {
+      let vis = 0;
+      gr.querySelectorAll('.row').forEach(r => { const ok = !q || r.dataset.q.indexOf(q)>=0; r.hidden = !ok; if (ok) vis++; });
+      gr.hidden = !vis; if (vis) any = true;
+    });
+    $('#artNone').hidden = any;
+  });
 }
 function pickWallet(which){
   const bal = balances(F.id);
@@ -831,10 +929,10 @@ function openWallet(name, fromOp){
     <div class="gh">Владелец</div>
     <div class="chips" id="wOwner"></div>
     <div class="gh">Иконка</div>
-    <div class="box gl"><div class="emojis" id="wIcons"></div></div>
+    <div class="box gl"><div class="icons" id="wIcons"></div></div>${customIconRow('wicon')}
     <div class="gf">${w ? (n ? `Операций: ${n}. Кошелёк с историей нельзя удалить, но можно скрыть.` : 'Операций по кошельку нет.') : 'Кошелёк появится в Google Таблице на листе «Кошельки».'}</div>`);
   const upd = () => {
-    $('#wIcons').innerHTML = uniq(WALLET_ICONS.concat(F.icon)).map(i=>`<button class="${i===F.icon?'on':''}" data-act="wicon" data-v="${esc(i)}">${esc(i)}</button>`).join('');
+    $('#wIcons').innerHTML = `<div class="ich">Кошельки</div><div class="emojis">${WALLET_ICONS.map(i=>`<button class="${i===F.icon?'on':''}" data-act="wicon" data-v="${esc(i)}">${esc(i)}</button>`).join('')}</div>` + iconGrid(WALLET_ICONS.indexOf(F.icon)>=0 ? '' : F.icon, 'wicon');
     $('#wOwner').innerHTML = [''].concat(owners).map(o=>`<button class="chip gl ${o===F.owner?'on':''}" data-act="wowner" data-v="${esc(o)}">${o ? esc(o) : 'Не указан'}</button>`).join('');
     $('#wIconBig').textContent = F.icon;
   };
@@ -907,7 +1005,8 @@ function openPlan(g, name){
       ${hist.map(k=>`<div class="fr"><span class="k t2">${esc(mShort(k))}</span><span class="val t2">план ${nf.format(planOf(k,g,name))} · факт ${nf.format(factOf(k,g,name,t))}</span></div>`).join('')}
       <div class="fr"><span class="k">Среднее за 3 месяца</span><span class="val">${money(Math.round(avg))}</span></div>
     </div>
-    <div class="gf">План хранится в Google Таблице на листе «Бюджет». Если столбца нужного месяца нет — он будет добавлен автоматически.</div>`);
+    <div class="gf">План хранится в Google Таблице на листе «Бюджет». Если столбца нужного месяца нет — он будет добавлен автоматически.</div>
+    <div class="box gl" style="margin-top:22px"><button class="row tap" data-act="art-edit" data-g="${esc(g)}" data-v="${esc(name)}"><span class="ico">✎</span><span class="m"><div class="t"><span class="n">Изменить или удалить статью</span></div><div class="s">название, группа, иконка, скрыть</div></span>${DISC}</button></div>`);
   bindAmount(updPlan);
   updPlan();
 }
@@ -953,7 +1052,7 @@ function openArtNew(){
     <div class="chips" id="aScope"></div>
     <div class="gf" id="aInfo"></div>
     <div class="gh">Иконка</div>
-    <div class="box gl"><div class="emojis" id="aIcons"></div></div>
+    <div class="box gl"><div class="icons" id="aIcons"></div></div>${customIconRow('aicon')}
     <div class="gf">Статья появится в Google Таблице на листах «Статьи» и «Бюджет», отчёты перестроятся автоматически.</div>`);
   ['#aName','#aNewGroup','#aPlan'].forEach(s => $(s).addEventListener('input', updArt));
   updArt();
@@ -966,7 +1065,7 @@ function updArt(){
   $('#aGroups').innerHTML = groups.map(g=>`<button class="chip gl ${!F.newGroup&&g===F.group?'on':''}" data-act="agroup" data-v="${esc(g)}">${esc(g)}</button>`).join('') +
     `<button class="chip gl ${F.newGroup?'on':''}" data-act="agroup" data-v="">＋ Новая</button>`;
   $('#aNewBox').hidden = !F.newGroup;
-  $('#aIcons').innerHTML = uniq(ART_ICONS.concat(F.icon)).map(i=>`<button class="${i===F.icon?'on':''}" data-act="aicon" data-v="${esc(i)}">${esc(i)}</button>`).join('');
+  $('#aIcons').innerHTML = iconGrid(F.icon, 'aicon');
   $('#aIco').textContent = F.icon;
   $('#aScope').innerHTML = SCOPES(S.month).map(([k,l])=>`<button class="chip gl ${F.scope===k?'on':''}" data-act="ascope" data-v="${k}">${l}</button>`).join('');
   const plan = $('#aPlan').value.trim();
@@ -990,6 +1089,71 @@ async function saveArt(){
     hud('Статья «' + name + '» добавлена');
   });
 }
+/* редактирование и удаление статьи */
+function refreshArt(){ if (mode==='art') updArt(); else if (mode==='artEdit') updArtEdit(); }
+function openArtEdit(g, name){
+  const art = artOf(g, name); if (!art) return;
+  const n = D.ops.filter(o=>o.group===g && o.article===name).length;
+  mode = 'artEdit';
+  F = { oldGroup:g, oldName:name, type:art.type, group:g, newGroup:false, icon:art.icon||'•', active:art.active!==false, ops:n };
+  openSheet('Статья', 'Сохранить', `
+    <div class="ask" style="padding-top:18px">
+      <div class="wico gl" id="aIco"></div>
+      <input class="nameinp" id="aName" value="${esc(name)}" placeholder="Название статьи" autocomplete="off" maxlength="60">
+      <div class="hint">${art.type==='Расход'?'Расход':'Доход'} · операций: ${n}</div>
+    </div>
+    <div class="gh">Группа</div>
+    <div class="chips" id="aGroups"></div>
+    <div class="box gl" id="aNewBox" style="margin-top:10px" hidden><div class="fr"><span class="k">Новая группа</span><input class="txt" id="aNewGroup" placeholder="Например, Дети" autocomplete="off" maxlength="40"></div></div>
+    <div class="box gl" style="margin-top:22px"><div class="fr"><span class="k">Показывать при вводе</span><input type="checkbox" class="sw" id="aActive" ${F.active?'checked':''}></div></div>
+    <div class="gf">Скрытая статья не предлагается при вводе, но остаётся в отчётах и истории.</div>
+    <div class="gh">Иконка</div>
+    <div class="box gl"><div class="icons" id="aIcons"></div></div>${customIconRow('aicon')}
+    ${n ? `<div class="gf" style="margin-top:22px">Удалить нельзя: по статье ${n} ${plural(n,'операция','операции','операций')}. Можно скрыть или переименовать — операции в журнале переименуются вместе со статьёй.</div>`
+        : `<div class="box gl" style="margin-top:22px"><button class="row tap danger" data-act="art-del">Удалить статью</button></div><div class="gf">Операций по статье нет — её можно удалить вместе с планом.</div>`}`);
+  ['#aName','#aNewGroup'].forEach(sel => $(sel).addEventListener('input', updArtEdit));
+  updArtEdit();
+}
+function updArtEdit(){
+  if (mode!=='artEdit') return;
+  const groups = uniq(D.articles.map(a=>a.group));
+  $('#aGroups').innerHTML = groups.map(g=>`<button class="chip gl ${!F.newGroup&&g===F.group?'on':''}" data-act="agroup" data-v="${esc(g)}">${esc(g)}</button>`).join('') +
+    `<button class="chip gl ${F.newGroup?'on':''}" data-act="agroup" data-v="">＋ Новая</button>`;
+  $('#aNewBox').hidden = !F.newGroup;
+  $('#aIcons').innerHTML = iconGrid(F.icon, 'aicon');
+  $('#aIco').textContent = F.icon;
+  const group = F.newGroup ? $('#aNewGroup').value.trim() : F.group;
+  $('#shDone').disabled = !$('#aName').value.trim() || !group || S.saving;
+}
+async function saveArtEdit(){
+  const name = $('#aName').value.trim();
+  const group = F.newGroup ? $('#aNewGroup').value.trim() : F.group;
+  if (!name) return fail('Введите название', '#aName');
+  if (!group) return fail('Укажите группу', '#aNewGroup');
+  if ((group!==F.oldGroup || name!==F.oldName) && D.articles.some(a => a.group.toLowerCase()===group.toLowerCase() && a.name.toLowerCase()===name.toLowerCase())) return fail('Такая статья уже есть', '#aName');
+  const article = { group, name, icon:F.icon, active: $('#aActive').checked };
+  await busy(async () => {
+    D = await api('updateArticle', { old:{ group:F.oldGroup, name:F.oldName }, article });
+    cache(); haptic('success'); closeSheet(); render(); hud('Статья сохранена');
+  });
+}
+async function deleteArt(){
+  if (!F || mode!=='artEdit' || F.ops) return;
+  if (!(await ask('Удалить статью «' + F.oldName + '»? План по ней тоже удалится.'))) return;
+  const g = F.oldGroup, name = F.oldName;
+  await busy(async () => {
+    D = await api('deleteArticle', { group:g, name });
+    cache(); haptic('success'); closeSheet(); render(); hud('Статья удалена');
+  });
+}
+function openHidden(){
+  mode = 'hidden';
+  const list = D.articles.filter(a=>a.type===S.pfType && !a.active);
+  openSheet('Скрытые статьи', 'Готово', `<div class="ask" style="padding-top:14px"><div class="q">Скрытые статьи</div><div class="hint">Они не предлагаются при вводе. Нажмите, чтобы вернуть или изменить.</div></div>
+    <div class="box gl" style="margin-top:18px">${list.map(a=>`<button class="row tap" data-act="art-edit" data-g="${esc(a.group)}" data-v="${esc(a.name)}"><span class="ico">${esc(a.icon||'•')}</span><span class="m"><div class="t"><span class="n">${esc(a.name)}</span></div><div class="s">${esc(a.group)}</div></span>${DISC}</button>`).join('') || '<div class="empty">Скрытых статей нет</div>'}</div>`);
+  $('#shDone').disabled = false;
+}
+
 async function copyPlan(){
   const from = mAdd(S.month,-1), to = S.month;
   const filled = Object.keys(D.budget[to]||{}).length;
@@ -1006,7 +1170,7 @@ async function busy(fn){
   S.saving = true; const b = $('#shDone'); b.disabled = true; const txt = b.textContent; b.textContent = 'Сохраняю…';
   try { await fn(); }
   catch(e){ haptic('error'); hud(e.message || 'Не удалось сохранить'); }
-  finally { S.saving = false; b.textContent = txt; b.disabled = false; if (mode==='op') updInfo(); if (mode==='plan') updPlan(); if (mode==='art') updArt(); }
+  finally { S.saving = false; b.textContent = txt; b.disabled = false; if (mode==='op') updInfo(); if (mode==='plan') updPlan(); refreshArt(); }
 }
 function fail(msg, focus){ haptic('error'); hud(msg); if (focus){ const el=$(focus); if (el) el.focus(); } }
 function ask(msg){
@@ -1027,6 +1191,8 @@ document.addEventListener('click', e => {
     case 'tab': if (S.tab!==v){ S.tab = v; render(); window.scrollTo(0,0); haptic(); } break;
     case 'month': S.month = mAdd(S.month, +v); render(); haptic(); break;
     case 'opsf': S.opsFilter = v; render(); haptic(); break;
+    case 'opsw': S.opsWallet = v; render(); haptic(); break;
+    case 'oddsby': S.oddsBy = v; render(); haptic(); break;
     case 'pft': S.pfType = v; render(); haptic(); break;
     case 'odds': S.odds = v; render(); haptic(); break;
     case 'new': haptic(); openOp(null); break;
@@ -1036,14 +1202,17 @@ document.addEventListener('click', e => {
     case 'wallet-new': openWallet(null, mode==='op'); break;
     case 'close': closeSheet(); break;
     case 'back': popPage(); break;
-    case 'done': if (mode==='op') saveOp(); else if (mode==='wallet') saveWallet(); else if (mode==='plan') savePlan(); else if (mode==='art') saveArt(); break;
+    case 'done': if (mode==='op') saveOp(); else if (mode==='wallet') saveWallet(); else if (mode==='plan') savePlan(); else if (mode==='art') saveArt(); else if (mode==='artEdit') saveArtEdit(); else if (mode==='hidden') closeSheet(); break;
     case 'plan': openPlan(el.dataset.g, v); break;
     case 'pscope': F.scope = v; updPlan(); haptic(); break;
     case 'art-new': openArtNew(); break;
     case 'plan-copy': copyPlan(); break;
-    case 'atype': F.type = v; F.group = groupsFor(v)[0] || F.group; F.icon = v==='Доход' ? '💼' : '🛒'; updArt(); haptic(); break;
-    case 'agroup': if (v) { F.group = v; F.newGroup = false; } else { F.newGroup = true; setTimeout(()=>$('#aNewGroup').focus(), 50); } updArt(); haptic(); break;
-    case 'aicon': F.icon = v; updArt(); haptic(); break;
+    case 'atype': F.type = v; F.group = groupsFor(v)[0] || F.group; F.icon = v==='Доход' ? '💼' : '🛒'; refreshArt(); haptic(); break;
+    case 'agroup': if (v) { F.group = v; F.newGroup = false; } else { F.newGroup = true; setTimeout(()=>$('#aNewGroup').focus(), 50); } refreshArt(); haptic(); break;
+    case 'aicon': F.icon = v; refreshArt(); haptic(); break;
+    case 'art-edit': openArtEdit(el.dataset.g, v); break;
+    case 'art-hidden': openHidden(); break;
+    case 'art-del': deleteArt(); break;
     case 'ascope': F.scope = v; updArt(); haptic(); break;
     case 'delete': deleteOp(); break;
     case 'ftype': if (F.type!==v){ F.type = v; F.group=''; F.article=''; if (v!=='Перевод') F.wallet2=''; updOp(); haptic(); } break;
@@ -1138,6 +1307,16 @@ function demoApi(action, p){
     if (!DEMO_DB) DEMO_DB = demoData();
     if (action==='load') res(JSON.parse(JSON.stringify(DEMO_DB)));
     else if (action==='delete') res({ id:p.id });
+    else if (action==='updateArticle' || action==='deleteArticle'){
+      const db = JSON.parse(JSON.stringify(D));
+      if (action==='deleteArticle'){ db.articles = db.articles.filter(a=>!(a.group===p.group && a.name===p.name)); Object.values(db.budget).forEach(b=>delete b[akey(p.group,p.name)]); }
+      else {
+        const a = db.articles.find(x=>x.group===p.old.group && x.name===p.old.name); Object.assign(a, p.article);
+        const ok = akey(p.old.group,p.old.name), nk = akey(p.article.group,p.article.name);
+        if (ok!==nk){ Object.values(db.budget).forEach(b=>{ if (ok in b){ b[nk]=b[ok]; delete b[ok]; } }); db.ops.forEach(o=>{ if (o.group===p.old.group && o.article===p.old.name){ o.group=p.article.group; o.article=p.article.name; } }); }
+      }
+      DEMO_DB = db; res(JSON.parse(JSON.stringify(db)));
+    }
     else if (action==='setPlan' || action==='addArticle' || action==='copyPlan'){
       const db = JSON.parse(JSON.stringify(D));
       const put = (g,a,amt,months) => months.forEach(k => { db.budget[k] = db.budget[k] || {}; if (amt>0) db.budget[k][akey(g,a)] = amt; else delete db.budget[k][akey(g,a)]; if (db.months.indexOf(k)<0) db.months.push(k); });
