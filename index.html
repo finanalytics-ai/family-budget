@@ -17,6 +17,7 @@
   --glass:rgba(255,255,255,.42); --glass2:rgba(255,255,255,.66); --edge:rgba(255,255,255,.7); --sep:rgba(46,68,102,.1);
   --accent:#35558A; --on-accent:#FFFFFF; --pos:#2D6CC0; --neg:#C25B55; --warn:#B98A3A;
   --bar:rgba(255,255,255,.62); --dock:rgba(255,255,255,.5); --scrim:rgba(30,50,80,.25);
+  --c1:#2F5AA8; --c2:#1F9AA6; --c3:#C27A28; --c4:#7B58C4; --c5:#5E8F2E; --c6:#B5487A; --c0:#8C97A8;
   --font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --ease:cubic-bezier(.32,.72,0,1);
 }
@@ -26,6 +27,7 @@
   --glass:rgba(255,255,255,.07); --glass2:rgba(255,255,255,.14); --edge:rgba(255,255,255,.12); --sep:rgba(220,230,246,.1);
   --accent:#9DBEEE; --on-accent:#0D1626; --pos:#86B6F2; --neg:#F0918A; --warn:#E2B970;
   --bar:rgba(255,255,255,.1); --dock:rgba(16,26,44,.62); --scrim:rgba(0,0,0,.45);
+  --c1:#5F8DEB; --c2:#26A383; --c3:#C8803A; --c4:#9178DE; --c5:#96933A; --c6:#CF6C93; --c0:#6E7C93;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
@@ -232,6 +234,25 @@ details[open] .disc{transform:rotate(90deg)}
 .fchips{display:flex;gap:6px;overflow-x:auto;margin:10px -18px 0;padding:0 18px;scrollbar-width:none}
 .fchips::-webkit-scrollbar{display:none}
 .fchips .chip{height:32px;font-size:13px;padding:0 12px}
+.segbar{display:flex;gap:2px;height:14px;margin:4px 0 2px}
+.segbar i{display:block;height:100%;min-width:3px}
+.segbar i:first-child{border-radius:4px 0 0 4px} .segbar i:last-child{border-radius:0 4px 4px 0} .segbar i:only-child{border-radius:4px}
+.leg{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:14px}
+.leg+.leg{border-top:1px solid var(--sep)}
+.leg .sw2{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.leg .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.leg .am{font-weight:600;font-variant-numeric:tabular-nums}
+.leg .pc{width:42px;text-align:right;color:var(--text2);font-size:12.5px;font-variant-numeric:tabular-nums}
+.legs{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--text2);margin-top:8px}
+.legs span{display:inline-flex;align-items:center;gap:6px}
+.legs i{width:9px;height:9px;border-radius:3px;display:inline-block}
+.rk .bar{margin-top:7px;height:5px}
+.rk .bar>i{background:var(--accent)}
+.rk .dl{font-size:12px;color:var(--text2);font-weight:500}
+.hero2{text-align:center;padding:16px 0 4px}
+.hero2 .k{font-size:14px;color:var(--text2)}
+.hero2 .v{font-size:44px;font-weight:300;letter-spacing:-.04em;line-height:1.15;margin:4px 0 4px;font-variant-numeric:tabular-nums}
+.hero2 .d{font-size:13px;color:var(--text2)}
 .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .ask input.nameinp,.nameinp{border:0;outline:0;background:transparent;font-size:25px;line-height:1.3;font-weight:300;letter-spacing:-.02em;text-align:center;width:100%;max-width:none;color:var(--text);padding:0}
 .nameinp::placeholder{color:var(--text3)}
@@ -328,6 +349,7 @@ const MONTHS = ['январь','февраль','март','апрель','ма�
 const MONTHS_SH = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
 const MONTHS_GEN = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 const MONTHS_PREP = ['январе','феврале','марте','апреле','мае','июне','июле','августе','сентябре','октябре','ноябре','декабре'];
+const MONTHS_DAT = ['январю','февралю','марту','апрелю','маю','июню','июлю','августу','сентябрю','октябрю','ноябрю','декабрю'];
 const WD = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
 const isoOf = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today = () => isoOf(new Date());
@@ -536,6 +558,8 @@ function viewHome(){
     <div class="tile gl"><div class="k">Разница</div><div class="v ${inc-exp<0?'neg':''}">${money(inc-exp,true)}</div></div>
   </div>
 
+  ${summaryPanel()}
+
   ${sec('Кошельки', '<button class="link" data-act="wallet-new">Добавить</button>')}
   <div class="list gl">${ws.map(w=>`<button class="row tap" data-act="wallet" data-v="${esc(w.name)}">
       <span class="ico">${esc(w.icon||'💳')}</span>
@@ -662,6 +686,97 @@ function walletBlock(from, to){
           top.map(([k,v]) => { const [a,g] = k.split('|'); return `<div class="kv"><span>${esc(artIcon(g,a))}&ensp;${esc(a)} <span style="opacity:.6">· ${esc(g)}</span></span><span class="num">${money(v)}</span></div>`; }).join('') : ''}
       </div></details>`;
   }).join('') + '</div>';
+}
+/* ===== Итоги месяца ===== */
+// Цвет группы закреплён за группой (порядок из справочника), не за местом в рейтинге
+function groupColor(g){
+  const order = uniq(D.articles.map(a=>a.group));
+  const i = order.indexOf(g);
+  return i>=0 && i<6 ? `var(--c${i+1})` : 'var(--c0)';
+}
+function monthReport(m){
+  const exp = D.ops.filter(o=>o.type==='Расход' && o.date.slice(0,7)===m);
+  const pm = mAdd(m,-1);
+  const curM = m===today().slice(0,7), dayCut = curM ? new Date().getDate() : 31;
+  const prevExp = D.ops.filter(o=>o.type==='Расход' && o.date.slice(0,7)===pm && +o.date.slice(8,10) <= dayCut);
+  const inc = sum(D.ops.filter(o=>o.type==='Доход' && o.date.slice(0,7)===m), o=>o.amount);
+  const total = sum(exp, o=>o.amount), prevTotal = sum(prevExp, o=>o.amount);
+  const agg = (list, key) => { const r = {}; list.forEach(o => { const k = key(o); r[k] = (r[k]||0) + o.amount; }); return r; };
+  const art = agg(exp, o=>akey(o.group,o.article)), artPrev = agg(prevExp, o=>akey(o.group,o.article));
+  const byArt = Object.keys(art).map(k => { const [g,a] = k.split('|'); return { g, a, v:art[k], prev:artPrev[k]||0, icon:artIcon(g,a) }; }).sort((x,y)=>y.v-x.v);
+  const grp = agg(exp, o=>o.group), grpPrev = agg(prevExp, o=>o.group);
+  const order = uniq(D.articles.map(a=>a.group).concat(Object.keys(grp)));
+  const byGroup = order.filter(g=>grp[g]).map(g => ({ g, v:grp[g], prev:grpPrev[g]||0 }));
+  const wal = agg(exp, o=>o.wallet);
+  const byWallet = Object.keys(wal).map(w => ({ w, v:wal[w], icon:(walOf(w)||{}).icon||'💳', owner:(walOf(w)||{}).owner||'' })).sort((x,y)=>y.v-x.v);
+  const isCur = m===today().slice(0,7);
+  const dim = new Date(+m.slice(0,4), +m.slice(5,7), 0).getDate();
+  const days = isCur ? new Date().getDate() : (m > today().slice(0,7) ? 0 : dim);
+  const top = exp.slice().sort((a,b)=>b.amount-a.amount).slice(0,5);
+  const cmp = curM ? `1–${dayCut} ${MONTHS_GEN[+pm.slice(5,7)-1]}` : MONTHS[+pm.slice(5,7)-1];
+  return { m, pm, total, prevTotal, inc, byArt, byGroup, byWallet, days, top, count:exp.length, cmp, partial:curM };
+}
+const deltaTxt = (v, prev) => !prev ? (v ? 'новое' : '') : (v===prev ? 'как в прошлом' : (v>prev ? '▲ ' : '▼ ') + nf.format(Math.round(Math.abs(v-prev))) + ' ₽');
+function segbar(list){
+  const t = sum(list, x=>x.v) || 1;
+  return `<div class="segbar" role="img" aria-label="${esc(list.map(x=>x.g+' '+Math.round(x.v/t*100)+'%').join(', '))}">${list.map(x=>`<i style="width:${x.v/t*100}%;background:${groupColor(x.g)}" title="${esc(x.g)}: ${esc(money(x.v))}"></i>`).join('')}</div>`;
+}
+function summaryPanel(){
+  const r = monthReport(S.month);
+  const mi = +S.month.slice(5,7)-1;
+  if (!r.total) return '';
+  const t = r.total;
+  return sec('Итоги ' + MONTHS_GEN[mi], '<button class="link" data-act="report">Полный отчёт</button>') + `
+  <button class="panel gl tap" data-act="report" style="display:block;width:100%;text-align:left">
+    <div class="spl"><span class="t2" style="font-size:13px;font-weight:500">Потрачено</span><span class="t2" style="font-size:12.5px">${r.prevTotal ? (r.total>r.prevTotal?'▲ ':'▼ ') + Math.abs(Math.round((r.total-r.prevTotal)/r.prevTotal*100)) + '% к ' + (r.partial ? 'тем же дням ' + MONTHS_GEN[(mi+11)%12] : MONTHS_DAT[(mi+11)%12]) : ''}</span></div>
+    <div style="font-size:28px;font-weight:300;letter-spacing:-.035em;margin:2px 0 10px" class="num">${money(t)}</div>
+    ${segbar(r.byGroup)}
+    <div class="legs">${r.byGroup.map(x=>`<span><i style="background:${groupColor(x.g)}"></i>${esc(x.g)} · ${nf.format(Math.round(x.v))} ₽</span>`).join('')}</div>
+    <div style="margin-top:12px">${r.byArt.slice(0,3).map((x,i)=>`<div class="leg"><span>${esc(x.icon)}</span><span class="nm">${esc(x.a)} <span class="t2" style="font-size:12px">· ${esc(x.g)}</span></span><span class="am">${money(x.v)}</span><span class="pc">${Math.round(x.v/t*100)}%</span></div>`).join('')}</div>
+  </button>`;
+}
+function openReport(){
+  mode = 'report';
+  S.repBy = S.repBy || 'art';
+  const mi = +S.month.slice(5,7)-1;
+  openSheet('Итоги · ' + MONTHS[mi] + ' ' + S.month.slice(0,4), 'Готово', '<div id="repBody"></div>');
+  $('#shDone').disabled = false;
+  updReport();
+}
+function updReport(){
+  if (mode!=='report') return;
+  const r = monthReport(S.month), mi = +S.month.slice(5,7)-1, pmi = (mi+11)%12, t = r.total || 1;
+  if (!r.total){ $('#repBody').innerHTML = `<div class="ask"><div class="q">В ${MONTHS_PREP[mi]} расходов нет</div><div class="hint">Как только появятся операции, здесь будет сводка.</div></div>`; return; }
+  const saved = r.inc - r.total;
+  const by = S.repBy;
+  const rows = by==='wal'
+    ? r.byWallet.map(x => `<div class="row rk"><span class="ico">${esc(x.icon)}</span><span class="m"><div class="spl"><span class="t"><span class="n">${esc(x.w)}</span></span><b class="num" style="font-weight:600">${money(x.v)}</b></div>
+        <div class="spl"><span class="s">${esc(x.owner)}</span><span class="dl">${Math.round(x.v/t*100)}%</span></div><div class="bar"><i style="width:${x.v/r.byWallet[0].v*100}%"></i></div></span></div>`).join('')
+    : r.byArt.map(x => `<div class="row rk"><span class="ico">${esc(x.icon)}</span><span class="m"><div class="spl"><span class="t"><span class="n">${esc(x.a)}</span></span><b class="num" style="font-weight:600">${money(x.v)}</b></div>
+        <div class="spl"><span class="s">${esc(x.g)} · ${Math.round(x.v/t*100)}%</span><span class="dl">${esc(deltaTxt(x.v, x.prev))}</span></div><div class="bar"><i style="width:${x.v/r.byArt[0].v*100}%"></i></div></span></div>`).join('');
+  $('#repBody').innerHTML = `
+    <div class="hero2">
+      <div class="k">Потрачено в ${MONTHS_PREP[mi]}</div>
+      <div class="v">${money(r.total)}</div>
+      <div class="d">${r.prevTotal ? `${esc(r.cmp)}: ${money(r.prevTotal)} · ${r.total>r.prevTotal?'▲':'▼'} ${money(Math.abs(r.total-r.prevTotal))}` : 'в прошлом месяце расходов нет'}</div>
+    </div>
+    <div class="tiles">
+      <div class="tile gl"><div class="k">Доходы</div><div class="v">${money(r.inc)}</div></div>
+      <div class="tile gl"><div class="k">${saved>=0?'Отложено':'Не хватило'}</div><div class="v ${saved<0?'neg':''}">${money(Math.abs(saved))}</div></div>
+      <div class="tile gl"><div class="k">В день</div><div class="v">${r.days ? money(Math.round(r.total/r.days)) : '—'}</div></div>
+    </div>
+    <div class="gh">Кто сколько потратил (по группам)</div>
+    <div class="box gl" style="padding:14px 16px 8px">
+      ${segbar(r.byGroup)}
+      <div style="margin-top:8px">${r.byGroup.map(x=>`<div class="leg"><span class="sw2" style="background:${groupColor(x.g)}"></span><span class="nm">${esc(x.g)}</span><span class="am">${money(x.v)}</span><span class="pc">${Math.round(x.v/t*100)}%</span></div>`).join('')}</div>
+    </div>
+    <div class="gh">На что потратили</div>
+    <div class="seg gl">${[['art','По статьям'],['wal','По кошелькам']].map(([v,l])=>`<button class="${by===v?'on':''}" data-act="repby" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="box gl" style="margin-top:10px">${rows}</div>
+    <div class="gf">${by==='art' ? 'Справа — изменение по каждой статье к ' + (r.partial ? 'тем же дням ' + MONTHS_GEN[pmi] : MONTHS_DAT[pmi]) + '.' : 'Сколько ушло с каждого кошелька — видно, кто фактически платил.'}</div>
+    <div class="gh">Крупные траты</div>
+    <div class="box gl">${r.top.map(o=>`<div class="row"><span class="ico">${esc(artIcon(o.group,o.article))}</span><span class="m"><div class="t"><span class="n">${esc(o.article)}</span></div><div class="s">${esc(dLabel(o.date))} · ${esc(o.wallet)}${o.cp?' · '+esc(o.cp):''}</div></span><span class="a"><b>${money(o.amount)}</b></span></div>`).join('')}</div>
+    <div class="gf" style="text-align:center;margin-top:14px">${r.count} ${plural(r.count,'расход','расхода','расходов')} за ${r.days} ${plural(r.days,'день','дня','дней')}</div>`;
 }
 function groupIcon(g){ return /общ/i.test(g) ? '👪' : /люс|жен|мам/i.test(g) ? '👩' : /кир|муж|пап/i.test(g) ? '👨' : '👤'; }
 
@@ -1193,6 +1308,8 @@ document.addEventListener('click', e => {
     case 'opsf': S.opsFilter = v; render(); haptic(); break;
     case 'opsw': S.opsWallet = v; render(); haptic(); break;
     case 'oddsby': S.oddsBy = v; render(); haptic(); break;
+    case 'report': openReport(); break;
+    case 'repby': S.repBy = v; updReport(); haptic(); break;
     case 'pft': S.pfType = v; render(); haptic(); break;
     case 'odds': S.odds = v; render(); haptic(); break;
     case 'new': haptic(); openOp(null); break;
@@ -1202,7 +1319,7 @@ document.addEventListener('click', e => {
     case 'wallet-new': openWallet(null, mode==='op'); break;
     case 'close': closeSheet(); break;
     case 'back': popPage(); break;
-    case 'done': if (mode==='op') saveOp(); else if (mode==='wallet') saveWallet(); else if (mode==='plan') savePlan(); else if (mode==='art') saveArt(); else if (mode==='artEdit') saveArtEdit(); else if (mode==='hidden') closeSheet(); break;
+    case 'done': if (mode==='op') saveOp(); else if (mode==='wallet') saveWallet(); else if (mode==='plan') savePlan(); else if (mode==='art') saveArt(); else if (mode==='artEdit') saveArtEdit(); else if (mode==='hidden' || mode==='report') closeSheet(); break;
     case 'plan': openPlan(el.dataset.g, v); break;
     case 'pscope': F.scope = v; updPlan(); haptic(); break;
     case 'art-new': openArtNew(); break;
