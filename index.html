@@ -33,7 +33,7 @@
 [hidden]{display:none!important}
 html{background:var(--base)}
 html,body{margin:0;color:var(--text);font:15px/1.4 var(--font);letter-spacing:-.011em;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
-body{min-height:100vh;padding-bottom:calc(200px + env(safe-area-inset-bottom));position:relative}
+body{min-height:100vh;padding-bottom:calc(100px + env(safe-area-inset-bottom));position:relative}
 .mesh,.mesh-in{background:
     radial-gradient(55% 32% at 18% 8%,var(--b1) 0%,transparent 70%),
     radial-gradient(45% 30% at 90% 26%,var(--b2) 0%,transparent 72%),
@@ -53,18 +53,20 @@ input{font:inherit;color:inherit;letter-spacing:inherit}
 @keyframes pulse{50%{opacity:.3}}
 
 /* ---------- header ---------- */
-.top{position:sticky;top:0;z-index:10;padding:calc(14px + env(safe-area-inset-top)) 18px 10px;max-width:640px;margin:0 auto;transition:background .3s}
+.top{position:sticky;top:0;z-index:10;padding:calc(8px + env(safe-area-inset-top)) 16px 8px;max-width:640px;margin:0 auto;transition:background .3s}
 .top.scrolled{background:color-mix(in srgb,var(--base) 60%,transparent);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
-.hrow{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.hrow h1{margin:0;font-size:26px;line-height:1.15;font-weight:600;letter-spacing:-.03em}
+.hrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hrow h1{margin:0;font-size:21px;line-height:1.2;font-weight:600;letter-spacing:-.025em;display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hrow h1 .dot{width:6px;height:6px;opacity:0;transition:opacity .2s}
+.hrow h1 .dot.busy{opacity:1;animation:pulse 1s infinite}
 .subt{display:flex;align-items:center;gap:7px;margin-top:6px;font-size:13px;color:var(--text2)}
 .subt .dot.busy{animation:pulse 1s infinite}
-.mpill{display:flex;align-items:center;border-radius:999px;padding:4px;flex:0 0 auto;margin-top:2px}
-.mpill button{width:30px;height:30px;border-radius:50%;display:grid;place-items:center}
+.mpill{display:flex;align-items:center;border-radius:999px;padding:3px;flex:0 0 auto}
+.mpill button{width:28px;height:28px;border-radius:50%;display:grid;place-items:center}
 .mpill button:active{background:var(--glass2)}
 .mpill button svg{width:7px;height:12px}
 .mpill span{font-size:13.5px;font-weight:500;padding:0 4px;min-width:66px;text-align:center}
-.ptabs{display:flex;border-radius:999px;padding:4px;margin-top:14px}
+.ptabs{display:flex;border-radius:999px;padding:3px;margin-top:8px}
 .ptabs button{flex:1;height:36px;border-radius:999px;font-size:13.5px;font-weight:500;text-align:center;transition:background .25s,color .25s}
 .ptabs button.on{background:var(--accent);color:var(--on-accent);font-weight:600}
 
@@ -143,11 +145,17 @@ details[open] .disc{transform:rotate(90deg)}
 
 /* ---------- нижняя панель ---------- */
 .dock{position:fixed;left:0;right:0;bottom:0;z-index:12;max-width:640px;margin:0 auto;background:var(--dock);border-top:1px solid var(--edge);
-  -webkit-backdrop-filter:blur(26px) saturate(150%);backdrop-filter:blur(26px) saturate(150%);border-radius:28px 28px 0 0;padding:20px 18px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(40,70,120,.08)}
+  -webkit-backdrop-filter:blur(26px) saturate(150%);backdrop-filter:blur(26px) saturate(150%);border-radius:22px 22px 0 0;padding:10px 14px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(40,70,120,.08)}
 .dock::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:.12;
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 220' fill='none' stroke='%2335558A' stroke-width='1'%3E%3Cellipse cx='420' cy='240' rx='120' ry='90'/%3E%3Cellipse cx='420' cy='240' rx='170' ry='130'/%3E%3Cellipse cx='420' cy='240' rx='220' ry='170'/%3E%3Cellipse cx='420' cy='240' rx='270' ry='210'/%3E%3Cellipse cx='420' cy='240' rx='320' ry='250'/%3E%3Cellipse cx='420' cy='240' rx='370' ry='290'/%3E%3C/svg%3E") right bottom/cover no-repeat}
-.dock .lbl{font-size:13px;color:var(--text2);font-weight:500}
-.dock .amt{font-size:34px;font-weight:300;letter-spacing:-.04em;font-variant-numeric:tabular-nums;margin-top:2px;line-height:1.15}
+.dock .lbl{font-size:11.5px;color:var(--text2);font-weight:500}
+.dock .drow{display:flex;align-items:center;gap:8px}
+.dock .dsum{flex:1;min-width:0}
+.dock .cta{width:auto;height:44px;margin:0;padding:0 18px;font-size:15px;flex:0 0 auto}
+.dock .tr{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;background:var(--glass2);border:1px solid var(--edge)}
+.dock .tr svg{width:18px;height:18px}
+.dock .tr:active{transform:scale(.94)}
+.dock .amt{font-size:21px;font-weight:400;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dock .cnt{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;background:var(--glass2);font-size:12px;font-weight:600}
 .dock .cnt i{width:8px;height:8px;border-radius:50%;background:var(--accent)}
 .cta{position:relative;width:100%;height:56px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:16px;font-weight:600;letter-spacing:-.015em;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:16px;transition:transform .15s,opacity .2s;box-shadow:0 8px 24px color-mix(in srgb,var(--accent) 30%,transparent)}
@@ -282,10 +290,7 @@ code{background:var(--glass2);padding:3px 9px;border-radius:8px;font:600 16px ui
 <div id="demoBar" class="demo" hidden>Демо — данные ненастоящие и не сохраняются</div>
 <header class="top" id="top">
   <div class="hrow">
-    <div>
-      <h1 id="title">Обзор</h1>
-      <div class="subt"><i class="dot" id="sdot"></i><span id="subt">Семейный бюджет</span></div>
-    </div>
+    <h1><span id="title">Обзор</span><i class="dot" id="sdot" title="Синхронизация"></i></h1>
     <div class="mpill gl">
       <button data-act="month" data-v="-1" aria-label="Предыдущий месяц"><svg viewBox="0 0 7 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1 1 6l5 5"/></svg></button>
       <span id="mlabel">…</span>
@@ -302,12 +307,11 @@ code{background:var(--glass2);padding:3px 9px;border-radius:8px;font:600 16px ui
 <main id="view"></main>
 
 <footer class="dock" id="dock">
-  <button class="float gl" data-act="new-tr"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h12M12 3l4 4-4 4M16 13H4M8 17l-4-4 4-4"/></svg>Перевод</button>
-  <div class="spl" style="align-items:flex-end">
-    <div><div class="lbl">На всех счетах</div><div class="amt" id="dAmt">—</div></div>
-    <span class="cnt" id="dCnt"><i></i>0 операций</span>
+  <div class="drow">
+    <div class="dsum"><div class="lbl">На всех счетах</div><div class="amt" id="dAmt">—</div></div>
+    <button class="tr" data-act="new-tr" aria-label="Перевод между кошельками"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h12M12 3l4 4-4 4M16 13H4M8 17l-4-4 4-4"/></svg></button>
+    <button class="cta" data-act="new"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>Добавить</button>
   </div>
-  <button class="cta" data-act="new">Добавить операцию <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h12M11 5l5 5-5 5"/></svg></button>
 </footer>
 
 <div class="scrim" id="scrim" data-act="close"></div>
@@ -490,22 +494,18 @@ function odds(from, to){
 }
 
 /* экраны */
-const TITLES = { home:'Обзор', ops:'Операции', pf:'План-факт', odds:'Движение денег' };
+const TITLES = { home:'Обзор', ops:'Операции', pf:'План-факт', odds:'ОДДС' };
 function render(){
   if (!D) return;
   $('#title').textContent = TITLES[S.tab];
   $('#mlabel').textContent = MONTHS_SH[+S.month.slice(5,7)-1] + ' ' + S.month.slice(0,4);
   setSync(S.busy);
   document.querySelectorAll('#tabs button').forEach(t => t.classList.toggle('on', t.dataset.v===S.tab));
-  const n = opsOfMonth(S.month).length;
   $('#dAmt').textContent = money(sum(Object.values(balances())));
-  $('#dCnt').innerHTML = `<i></i>${n} ${plural(n,'операция','операции','операций')}`;
   $('#view').innerHTML = S.tab==='home' ? viewHome() : S.tab==='ops' ? viewOps() : S.tab==='pf' ? viewPF() : viewOdds();
 }
 function setSync(on){
   const d = $('#sdot'); if (d) d.classList.toggle('busy', !!on);
-  const who = D && D.user && D.user.name && !DEMO ? ' · ' + D.user.name : '';
-  $('#subt').textContent = on ? 'Синхронизация…' : (DEMO ? 'Демо-режим' : 'Синхронизировано') + who + ' · ' + mLabel(S.month);
 }
 function periodLabel(){ const [a,b] = oddsRange(); return a===b ? mLabel(a) : mShort(a)+' — '+mShort(b); }
 function barCls(fact, plan, type){
