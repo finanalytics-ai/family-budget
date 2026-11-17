@@ -346,7 +346,7 @@ const qs = new URLSearchParams(location.search);
 const LS = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
 let API = qs.get('api'), API_SRC = 'ссылка кнопки';
 if (API) LS.set('fb_api', API); else { API = LS.get('fb_api'); API_SRC = 'память телефона'; }
-const APP_BUILD = '2026-11-16.10';
+const APP_BUILD = '2026-11-17.1';
 const DEMO = qs.has('demo');
 
 const $ = s => document.querySelector(s);
@@ -521,7 +521,7 @@ const sec = (title, right) => `<div class="sec"><h2>${title}</h2>${right||''}</d
 function opRow(o, noDate){
   const tr = o.type==='Перевод';
   const tag = tr ? '<span class="tag">Перевод</span>' : `<span class="tag ${o.type==='Доход'?'p':''}">${esc(payerOf(o))}</span>`;
-  const sub = tr ? (o.wallet+' → '+o.wallet2) : [o.group, o.wallet, o.cp].filter(Boolean).join(' · ');
+  const sub = tr ? (o.wallet+' → '+o.wallet2) : [oneGroup() ? '' : o.group, o.wallet, o.cp].filter(Boolean).join(' · ');
   const amt = o.type==='Доход' ? money(o.amount,true) : tr ? money(o.amount) : money(-o.amount);
   return `<button class="row tap" data-act="edit" data-v="${esc(o.id)}">
     <span class="ico">${esc(tr ? '⇄' : artIcon(o.group,o.article))}</span>
@@ -611,7 +611,10 @@ function viewPF(){
   </div>
   <div class="gf" style="margin:8px 4px 0">${empty && canCopy ? `План на ${MONTHS[+S.month.slice(5,7)-1]} пуст — возьмите его из прошлого месяца или задайте по статьям.` : 'Нажмите на статью, чтобы изменить план.'}</div>`;
   if (!pf.groups.length) return seg + head + actions + '<div class="empty">Статей пока нет</div>';
-  return seg + head + actions + pf.groups.map(g => sec(esc(g.group), `<span class="v num">${money(g.fact)} из ${money(g.plan)}</span>`) + '<div class="list gl">' + g.items.map(i => {
+  const merge = oneGroup() ? '' : `<div class="panel gl" style="margin-top:14px"><div style="font-weight:600;margin-bottom:4px">Статьи разбиты по людям</div>
+    <div class="t2" style="font-size:13px;margin-bottom:12px">Можно убрать группы ${esc(uniq(D.articles.map(a=>a.group)).join(', '))} и сделать один общий список. Одинаковые статьи объединятся, план сложится, история сохранится. Кто платил — видно в поле операции.</div>
+    <button class="cta" style="height:44px;margin:0" data-act="merge-groups">Сделать один список</button></div>`;
+  return seg + head + actions + merge + pf.groups.map(g => (oneGroup() ? sec('Статьи', `<span class="v num">${money(g.fact)} из ${money(g.plan)}</span>`) : sec(esc(g.group), `<span class="v num">${money(g.fact)} из ${money(g.plan)}</span>`)) + '<div class="list gl">' + g.items.map(i => {
       const d = t==='Расход' ? i.plan - i.fact : i.fact - i.plan;
       let tag = '', rest;
       if (!i.plan){ rest = i.fact ? 'без плана' : 'план не задан'; if (i.fact && t==='Расход') tag = '<span class="tag n">Вне плана</span>'; }
@@ -628,7 +631,9 @@ function viewOdds(){
   const by = S.oddsBy || 'art';
   const seg = `<div class="seg gl">${[['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].map(([v,l])=>`<button class="${S.odds===v?'on':''}" data-act="odds" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="seg gl" style="margin-top:8px">${[['art','По статьям'],['wal','По кошелькам']].map(([v,l])=>`<button class="${by===v?'on':''}" data-act="oddsby" data-v="${v}">${l}</button>`).join('')}</div>`;
-  const block = list => list.length ? '<div class="list gl">' + list.map(g => `<details><summary class="row tap"><span class="ico">${esc(groupIcon(g.group))}</span><span class="m"><div class="t"><span class="n">${esc(g.group)}</span></div><div class="s">${g.items.length} ${plural(g.items.length,'статья','статьи','статей')}</div></span><span class="a"><b>${money(g.total)}</b></span>${DISC}</summary>
+  const block = list => list.length && oneGroup() ? '<div class="list gl">' + list.flatMap(g => g.items.map(i => ({ g:g.group, a:i.a, v:i.v }))).sort((x,y)=>y.v-x.v).map(i =>
+      `<div class="row"><span class="ico">${esc(artIcon(i.g,i.a))}</span><span class="m"><div class="t"><span class="n">${esc(i.a)}</span></div></span><span class="a"><b>${money(i.v)}</b></span></div>`).join('') + '</div>'
+    : list.length ? '<div class="list gl">' + list.map(g => `<details><summary class="row tap"><span class="ico">${esc(groupIcon(g.group))}</span><span class="m"><div class="t"><span class="n">${esc(g.group)}</span></div><div class="s">${g.items.length} ${plural(g.items.length,'статья','статьи','статей')}</div></span><span class="a"><b>${money(g.total)}</b></span>${DISC}</summary>
       <div class="subrows">${g.items.map(i=>`<div class="kv"><span>${esc(artIcon(g.group,i.a))}&ensp;${esc(i.a)}</span><span class="num">${money(i.v)}</span></div>`).join('')}</div></details>`).join('') + '</div>'
     : '<div class="empty" style="padding:14px">Нет операций</div>';
   let html = seg + `<div class="dayh" style="margin-top:16px"><span>${esc(periodLabel())}</span><span></span></div>
@@ -693,8 +698,10 @@ function walletBlock(from, to){
 /* ===== Итоги месяца ===== */
 // Цвет группы закреплён за группой (порядок из справочника), не за местом в рейтинге
 // Кто платил: явно указанный плательщик, иначе владелец кошелька
-function people(){ return (D.people && D.people.length) ? D.people : uniq(D.wallets.map(w=>w.owner).filter(Boolean)); }
-function payerOf(o){ if (o.payer) return o.payer; const w = walOf(o.wallet); return (w && w.owner) || o.author || '—'; }
+function people(){ return ((D.people && D.people.length) ? D.people : uniq(D.wallets.map(w=>w.owner).filter(Boolean))).filter(x=>!/^общ/i.test(x)); }
+// Статьи без групп: если группа одна, нигде её не показываем
+function oneGroup(){ return uniq(D.articles.map(a=>a.group)).length <= 1; }
+function payerOf(o){ if (o.payer) return o.payer; const w = walOf(o.wallet); return (w && w.owner && !/^общ/i.test(w.owner)) ? w.owner : (o.author || '—'); }
 function myPerson(){
   const ps = people(), u = D.user || {};
   if (u.group && ps.indexOf(u.group)>=0) return u.group;
@@ -751,7 +758,7 @@ function summaryPanel(){
     <div class="t2" style="font-size:12px;margin-bottom:4px">Кто платил</div>
     ${segbar(r.byPayer)}
     <div class="legs">${r.byPayer.map(x=>`<span><i style="background:${groupColor(x.g)}"></i>${esc(x.g)} · ${nf.format(Math.round(x.v))} ₽</span>`).join('')}</div>
-    <div style="margin-top:12px">${r.byArt.slice(0,3).map((x,i)=>`<div class="leg"><span>${esc(x.icon)}</span><span class="nm">${esc(x.a)} <span class="t2" style="font-size:12px">· ${esc(x.g)}</span></span><span class="am">${money(x.v)}</span><span class="pc">${Math.round(x.v/t*100)}%</span></div>`).join('')}</div>
+    <div style="margin-top:12px">${r.byArt.slice(0,3).map((x,i)=>`<div class="leg"><span>${esc(x.icon)}</span><span class="nm">${esc(x.a)}${oneGroup() ? '' : ` <span class="t2" style="font-size:12px">· ${esc(x.g)}</span>`}</span><span class="am">${money(x.v)}</span><span class="pc">${Math.round(x.v/t*100)}%</span></div>`).join('')}</div>
   </button>`;
 }
 function openReport(){
@@ -775,7 +782,7 @@ function updReport(){
     ? r.byWallet.map(x => `<div class="row rk"><span class="ico">${esc(x.icon)}</span><span class="m"><div class="spl"><span class="t"><span class="n">${esc(x.w)}</span></span><b class="num" style="font-weight:600">${money(x.v)}</b></div>
         <div class="spl"><span class="s">${esc(x.owner)}</span><span class="dl">${Math.round(x.v/t*100)}%</span></div><div class="bar"><i style="width:${x.v/r.byWallet[0].v*100}%"></i></div></span></div>`).join('')
     : r.byArt.map(x => `<div class="row rk"><span class="ico">${esc(x.icon)}</span><span class="m"><div class="spl"><span class="t"><span class="n">${esc(x.a)}</span></span><b class="num" style="font-weight:600">${money(x.v)}</b></div>
-        <div class="spl"><span class="s">${esc(x.g)} · ${Math.round(x.v/t*100)}%</span><span class="dl">${esc(deltaTxt(x.v, x.prev))}</span></div><div class="bar"><i style="width:${x.v/r.byArt[0].v*100}%"></i></div></span></div>`).join('');
+        <div class="spl"><span class="s">${oneGroup() ? '' : esc(x.g)+' · '}${Math.round(x.v/t*100)}% всех расходов</span><span class="dl">${esc(deltaTxt(x.v, x.prev))}</span></div><div class="bar"><i style="width:${x.v/r.byArt[0].v*100}%"></i></div></span></div>`).join('');
   $('#repBody').innerHTML = `
     <div class="hero2">
       <div class="k">Потрачено в ${MONTHS_PREP[mi]}</div>
@@ -794,7 +801,7 @@ function updReport(){
     </div>
     <div class="gf">По полю «Кто платил» в операции. Если оно пустое — по владельцу кошелька.</div>
     <div class="gh">На что потратили</div>
-    <div class="seg gl">${[['art','Статьи'],['grp','Группы'],['wal','Кошельки']].map(([v,l])=>`<button class="${by===v?'on':''}" data-act="repby" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="seg gl">${[['art','Статьи']].concat(oneGroup() ? [] : [['grp','Группы']], [['wal','Кошельки']]).map(([v,l])=>`<button class="${by===v?'on':''}" data-act="repby" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="box gl" style="margin-top:10px">${rows}</div>
     <div class="gf">${by==='art' ? 'Справа — изменение по каждой статье к ' + (r.partial ? 'тем же дням ' + MONTHS_GEN[pmi] : MONTHS_DAT[pmi]) + '.' : (by==='grp' ? 'Группы статей — разделы бюджета; кто платил — выше.' : 'Сколько ушло с каждого кошелька.')}</div>
     <div class="gh">Крупные траты</div>
@@ -906,14 +913,14 @@ function updOp(){
     const dupName = n => arts.filter(a=>a.name===n).length > 1;
     const top = arts.map((a,i)=>({a,i,c:cnt[akey(a.group,a.name)]||0})).sort((x,y)=>y.c-x.c||x.i-y.i).slice(0,6).map(x=>x.a);
     if (F.article && !top.find(a=>a.group===F.group&&a.name===F.article)){ const cur = artOf(F.group,F.article); if (cur) top.unshift(cur); }
-    $('#fQuick').innerHTML = top.map(a=>`<button class="chip gl ${a.group===F.group&&a.name===F.article?'on':''}" data-act="fpick" data-g="${esc(a.group)}" data-v="${esc(a.name)}">${esc(a.icon||'•')} ${esc(a.name)}${dupName(a.name) ? ' · '+esc(a.group) : ''}</button>`).join('');
+    $('#fQuick').innerHTML = top.map(a=>`<button class="chip gl ${a.group===F.group&&a.name===F.article?'on':''}" data-act="fpick" data-g="${esc(a.group)}" data-v="${esc(a.name)}">${esc(a.icon||'•')} ${esc(a.name)}${dupName(a.name) && !oneGroup() ? ' · '+esc(a.group) : ''}</button>`).join('');
   }
   const art = !tr && F.article ? artOf(F.group, F.article) : null;
   const w1 = walOf(F.wallet), w2 = walOf(F.wallet2);
   const row = (act, k, val, ph) => `<button class="fr tap" data-act="${act}"><span class="k">${k}</span><span class="val ${val?'':'ph'}">${val || ph}</span>${DISC}</button>`;
   let html = '';
   if (!tr){
-    html += row('pick-art','Статья', art ? esc((art.icon||'')+' '+art.name)+' <small>· '+esc(art.group)+'</small>' : '', 'Выбрать');
+    html += row('pick-art','Статья', art ? esc((art.icon||'')+' '+art.name)+(oneGroup() ? '' : ' <small>· '+esc(art.group)+'</small>') : '', 'Выбрать');
     html += '<div class="info" id="fArtInfo" hidden></div>';
     html += row('pick-wal', t==='Доход' ? 'Зачислить на' : 'Кошелёк', w1 ? esc((w1.icon||'💳')+' '+w1.name) : '', 'Выбрать');
     html += '<div class="info" id="fWalInfo" hidden></div>';
@@ -978,7 +985,7 @@ function pickArticle(){
     <div class="empty" id="artNone" hidden>Ничего не найдено. Новую статью можно создать на вкладке «План».</div>`;
   pushPage('Статья', SEARCH + groups.map(g => {
     const arts = D.articles.filter(a=>a.type===t && a.group===g && (a.active || (a.group===F.group && a.name===F.article)));
-    return `<div class="artgrp" data-g="${esc(g.toLowerCase())}"><div class="gh">${esc(g)}</div><div class="box gl">${arts.map(a => {
+    return `<div class="artgrp" data-g="${esc(g.toLowerCase())}">${oneGroup() ? '<div style="height:14px"></div>' : `<div class="gh">${esc(g)}</div>`}<div class="box gl">${arts.map(a => {
       const plan = planOf(m,g,a.name), fact = factOf(m,g,a.name,t,F.id);
       const info = !plan ? 'без плана' : t==='Расход' ? (plan-fact>=0 ? 'осталось '+money(plan-fact) : '<span class="neg">перерасход '+money(fact-plan)+'</span>') : (fact>=plan ? 'выполнено' : 'ещё '+money(plan-fact));
       const on = a.group===F.group && a.name===F.article;
@@ -1052,7 +1059,7 @@ function openWallet(name, fromOp){
   const ret = fromOp && mode==='op' ? { ...F, amount: $('#fAmount') ? $('#fAmount').value : F.amount } : null;
   mode = 'wallet';
   F = w ? { oldName:w.name, icon:w.icon||'💳', owner:w.owner||'', ret } : { oldName:null, icon:'💳', owner:'', ret };
-  const owners = uniq(D.articles.map(a=>a.group).concat(D.wallets.map(x=>x.owner)).filter(Boolean));
+  const owners = uniq(people().concat(D.wallets.map(x=>x.owner)).filter(x => x && !/^общ/i.test(x)));
   const bal = w ? balances()[w.name] || 0 : null;
   const n = w ? D.ops.filter(o=>o.wallet===w.name||o.wallet2===w.name).length : 0;
   openSheet(w ? 'Кошелёк' : 'Новый кошелёк', w ? 'Сохранить' : 'Создать кошелёк', `
@@ -1134,7 +1141,7 @@ function openPlan(g, name){
     <div class="ask" style="padding-top:14px">
       <div class="wico gl">${esc(art.icon||'•')}</div>
       <div class="q">${esc(name)}</div>
-      <div class="hint">${esc(g)} · ${t==='Расход'?'расход':'доход'} · план на ${MONTHS[mi]}</div>
+      <div class="hint">${oneGroup() ? '' : esc(g)+' · '}${t==='Расход'?'расход':'доход'} · план на ${MONTHS[mi]}</div>
       ${amountField()}
       <div class="hint" id="pHint"></div>
     </div>
@@ -1185,8 +1192,8 @@ function openArtNew(){
       <input class="nameinp" id="aName" placeholder="Название статьи" autocomplete="off" maxlength="60">
       <div class="hint">Например: Такси, Секция ребёнка, Подработка</div>
     </div>
-    <div class="gh">Группа</div>
-    <div class="chips" id="aGroups"></div>
+    <div ${oneGroup()?'hidden':''}><div class="gh">Группа</div>
+    <div class="chips" id="aGroups"></div></div>
     <div class="box gl" id="aNewBox" style="margin-top:10px" hidden><div class="fr"><span class="k">Новая группа</span><input class="txt" id="aNewGroup" placeholder="Например, Дети" autocomplete="off" maxlength="40"></div></div>
     <div class="gh">План в месяц</div>
     <div class="box gl"><div class="fr"><span class="k">Сумма</span><input class="txt" id="aPlan" inputmode="decimal" placeholder="Можно задать позже" autocomplete="off"></div></div>
@@ -1244,8 +1251,8 @@ function openArtEdit(g, name){
       <input class="nameinp" id="aName" value="${esc(name)}" placeholder="Название статьи" autocomplete="off" maxlength="60">
       <div class="hint">${art.type==='Расход'?'Расход':'Доход'} · операций: ${n}</div>
     </div>
-    <div class="gh">Группа</div>
-    <div class="chips" id="aGroups"></div>
+    <div ${oneGroup()?'hidden':''}><div class="gh">Группа</div>
+    <div class="chips" id="aGroups"></div></div>
     <div class="box gl" id="aNewBox" style="margin-top:10px" hidden><div class="fr"><span class="k">Новая группа</span><input class="txt" id="aNewGroup" placeholder="Например, Дети" autocomplete="off" maxlength="40"></div></div>
     <div class="box gl" style="margin-top:22px"><div class="fr"><span class="k">Показывать при вводе</span><input type="checkbox" class="sw" id="aActive" ${F.active?'checked':''}></div></div>
     <div class="gf">Скрытая статья не предлагается при вводе, но остаётся в отчётах и истории.</div>
@@ -1296,6 +1303,13 @@ function openHidden(){
   $('#shDone').disabled = false;
 }
 
+async function mergeGroups(){
+  if (!(await ask('Сделать один список статей? Одинаковые статьи объединятся, план сложится, операции перейдут на объединённые статьи.'))) return;
+  S.busy = true; setSync(true);
+  try { D = await api('mergeGroups', {}); cache(); haptic('success'); hud('Готово: один список статей'); }
+  catch(e){ hud(e.message); }
+  finally { S.busy = false; render(); }
+}
 async function copyPlan(){
   const from = mAdd(S.month,-1), to = S.month;
   const filled = Object.keys(D.budget[to]||{}).length;
@@ -1351,6 +1365,7 @@ document.addEventListener('click', e => {
     case 'pscope': F.scope = v; updPlan(); haptic(); break;
     case 'art-new': openArtNew(); break;
     case 'plan-copy': copyPlan(); break;
+    case 'merge-groups': mergeGroups(); break;
     case 'atype': F.type = v; F.group = groupsFor(v)[0] || F.group; F.icon = v==='Доход' ? '💼' : '🛒'; refreshArt(); haptic(); break;
     case 'agroup': if (v) { F.group = v; F.newGroup = false; } else { F.newGroup = true; setTimeout(()=>$('#aNewGroup').focus(), 50); } refreshArt(); haptic(); break;
     case 'aicon': F.icon = v; refreshArt(); haptic(); break;
@@ -1452,6 +1467,16 @@ function demoApi(action, p){
     if (!DEMO_DB) DEMO_DB = demoData();
     if (action==='load') res(JSON.parse(JSON.stringify(DEMO_DB)));
     else if (action==='delete') res({ id:p.id });
+    else if (action==='mergeGroups'){
+      const db = JSON.parse(JSON.stringify(D)), G = 'Бюджет', seen = {}, arts = [];
+      db.articles.forEach(a => { const k = a.type+'|'+a.name.toLowerCase(); if (!seen[k]){ seen[k]=1; arts.push({ ...a, group:G }); } });
+      const budget = {};
+      Object.keys(db.budget).forEach(m => { budget[m] = {}; Object.entries(db.budget[m]).forEach(([k,v]) => { const n = k.split('|')[1], nk = akey(G,n); budget[m][nk] = (budget[m][nk]||0) + v; }); });
+      db.ops.forEach(o => { if (o.article) o.group = G; });
+      db.wallets.forEach(w => { if (/^общ/i.test(w.owner||'')) w.owner = ''; });
+      db.articles = arts; db.budget = budget; db.people = (db.people||[]).filter(x=>!/^общ/i.test(x));
+      DEMO_DB = db; res(JSON.parse(JSON.stringify(db)));
+    }
     else if (action==='updateArticle' || action==='deleteArticle'){
       const db = JSON.parse(JSON.stringify(D));
       if (action==='deleteArticle'){ db.articles = db.articles.filter(a=>!(a.group===p.group && a.name===p.name)); Object.values(db.budget).forEach(b=>delete b[akey(p.group,p.name)]); }

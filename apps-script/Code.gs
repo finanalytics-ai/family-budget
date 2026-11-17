@@ -12,7 +12,7 @@
 const DEFAULT_APP_URL = 'https://finanalytics-ai.github.io/family-budget/';
 
 // Версия кода — видна в меню и после «Обновить отчёты». Если видите другую — в Apps Script остался старый код.
-const SCRIPT_VERSION = '1.9 (16.11.2026)';
+const SCRIPT_VERSION = '2.0 (17.11.2026)';
 
 const SH = {
   J: 'Журнал', BAL: 'Остатки', PF: 'План-факт', ODDS: 'ОДДС', B: 'Бюджет',
@@ -27,36 +27,36 @@ const MONEY = '#,##0.00';
 const MONEY0 = '#,##0';
 
 // [Группа, Статья, Тип, Иконка, План в месяц]
+// Единая группа: статьи не привязаны к людям (кто платил — отдельное поле операции)
+const ONE_GROUP = 'Бюджет';
+// [Группа, Статья, Тип, Иконка, План в месяц]
 const DEFAULT_ARTICLES = [
-  ['Люся', 'Зарплата', 'Доход', '💼', 150000],
-  ['Кирилл', 'Зарплата', 'Доход', '💼', 190000],
-  ['Общие', 'Прочие доходы', 'Доход', '💰', 0],
-  ['Люся', 'Ногти', 'Расход', '💅', 5000],
-  ['Люся', 'Брови', 'Расход', '✨', 1000],
-  ['Люся', 'Волосы', 'Расход', '💇‍♀️', 3500],
-  ['Люся', 'Обеды', 'Расход', '🍱', 10000],
-  ['Люся', 'Косметика', 'Расход', '💄', 2000],
-  ['Люся', 'Бобик', 'Расход', '🐶', 5500],
-  ['Люся', 'Прокладки', 'Расход', '🌸', 1000],
-  ['Люся', 'Косметолог', 'Расход', '🧖‍♀️', 7000],
-  ['Люся', 'Пилатес', 'Расход', '🧘‍♀️', 4000],
-  ['Люся', 'Связь', 'Расход', '📱', 700],
-  ['Люся', 'Витамины', 'Расход', '💊', 5000],
-  ['Люся', 'Одежда', 'Расход', '👗', 5000],
-  ['Кирилл', 'Связь', 'Расход', '📱', 400],
-  ['Кирилл', 'Интернет', 'Расход', '🌐', 1600],
-  ['Кирилл', 'Одежда', 'Расход', '👕', 5000],
-  ['Кирилл', 'ИИ Подписки', 'Расход', '🤖', 4000],
-  ['Общие', 'Коммуналка', 'Расход', '🏠', 5000],
-  ['Общие', 'Еда', 'Расход', '🛒', 50000],
-  ['Общие', 'Развлечения', 'Расход', '🎉', 5000],
-  ['Общие', 'Кафе', 'Расход', '☕', 10000],
-  ['Общие', 'Подарки', 'Расход', '🎁', 10000]
+  ['Бюджет', 'Зарплата', 'Доход', '💼', 340000],
+  ['Бюджет', 'Прочие доходы', 'Доход', '💰', 0],
+  ['Бюджет', 'Еда', 'Расход', '🛒', 50000],
+  ['Бюджет', 'Обеды', 'Расход', '🍱', 10000],
+  ['Бюджет', 'Кафе', 'Расход', '☕', 10000],
+  ['Бюджет', 'Коммуналка', 'Расход', '🏠', 5000],
+  ['Бюджет', 'Связь', 'Расход', '📱', 1100],
+  ['Бюджет', 'Интернет', 'Расход', '🌐', 1600],
+  ['Бюджет', 'ИИ Подписки', 'Расход', '🤖', 4000],
+  ['Бюджет', 'Одежда', 'Расход', '👕', 10000],
+  ['Бюджет', 'Ногти', 'Расход', '💅', 5000],
+  ['Бюджет', 'Брови', 'Расход', '✨', 1000],
+  ['Бюджет', 'Волосы', 'Расход', '💇‍♀️', 3500],
+  ['Бюджет', 'Косметика', 'Расход', '💄', 2000],
+  ['Бюджет', 'Косметолог', 'Расход', '🧖‍♀️', 7000],
+  ['Бюджет', 'Прокладки', 'Расход', '🌸', 1000],
+  ['Бюджет', 'Пилатес', 'Расход', '🧘‍♀️', 4000],
+  ['Бюджет', 'Витамины', 'Расход', '💊', 5000],
+  ['Бюджет', 'Бобик', 'Расход', '🐶', 5500],
+  ['Бюджет', 'Развлечения', 'Расход', '🎉', 5000],
+  ['Бюджет', 'Подарки', 'Расход', '🎁', 10000]
 ];
 const DEFAULT_WALLETS = [
   ['Карта Кирилла', 'Кирилл', 0, '💳', true],
   ['Карта Люси', 'Люся', 0, '💳', true],
-  ['Наличные', 'Общие', 0, '💵', true]
+  ['Наличные', '', 0, '💵', true]
 ];
 
 /* =========================== МЕНЮ =========================== */
@@ -70,6 +70,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Обновить отчёты (ОДДС, План-факт, Остатки)', 'rebuildReports')
     .addItem('Добавить месяц…', 'addMonthPrompt')
+    .addItem('Убрать группы статей (один список)', 'mergeGroupsMenu')
     .addItem('Добавить 12 месяцев в бюджет', 'extendBudget')
     .addSeparator()
     .addItem('О скрипте (версия ' + SCRIPT_VERSION + ')', 'aboutScript')
@@ -485,6 +486,7 @@ function doPost(e) {
       case 'updateArticle': withLock_(() => updateArticle_(ss, p)); data = apiLoad_(ss, user); break;
       case 'deleteArticle': withLock_(() => deleteArticle_(ss, p)); data = apiLoad_(ss, user); break;
       case 'copyPlan': withLock_(() => copyPlan_(ss, p.from, p.to)); data = apiLoad_(ss, user); break;
+      case 'mergeGroups': withLock_(() => mergeGroups_(ss)); data = apiLoad_(ss, user); break;
       default: throw new Error('Неизвестное действие');
     }
     out = { ok: true, data: data };
@@ -567,7 +569,7 @@ function apiLoad_(ss, user) {
 
 /** Кто может платить: владельцы кошельков (Люся, Кирилл, Общие…). */
 function readPeople_(ss) {
-  const list = readWallets_(ss).map(w => String(w.owner || '').trim()).filter(Boolean);
+  const list = readWallets_(ss).map(w => String(w.owner || '').trim()).filter(x => x && !/^общ/i.test(x));
   const out = list.filter((x, i) => list.indexOf(x) === i);
   return out.length ? out : ['Люся', 'Кирилл'];
 }
@@ -710,9 +712,67 @@ function setPlan_(ss, p, noRebuild) {
 }
 
 /** p: {article:{group,name,type,icon}, amount, months} */
+function mergeGroupsMenu() {
+  const ui = SpreadsheetApp.getUi();
+  if (ui.alert('Убрать группы статей', 'Все статьи станут одним списком. Одинаковые статьи (например «Связь» у разных людей) объединятся, их план сложится, ' +
+    'операции в журнале перейдут на объединённую статью. Продолжить?', ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+  mergeGroups_(SpreadsheetApp.getActive());
+  ui.alert('Готово: статьи объединены в один список.');
+}
+
+/** Объединяет все группы в одну: «Статьи», «Бюджет» (план суммируется) и «Журнал». */
+function mergeGroups_(ss) {
+  const G = ONE_GROUP;
+  // Статьи
+  const as = ss.getSheetByName(SH.ART), an = as.getLastRow() - 1;
+  if (an > 0) {
+    const v = as.getRange(2, 1, an, 5).getValues(), seen = {}, out = [];
+    v.forEach(r => {
+      const name = String(r[1]).trim(), type = r[2];
+      if (!name || !type) return;
+      const k = type + '|' + name.toLowerCase();
+      if (seen[k] !== undefined) { if (r[4] === true) out[seen[k]][4] = true; return; }
+      seen[k] = out.length;
+      out.push([G, name, type, r[3] || '•', r[4] !== false]);
+    });
+    as.getRange(2, 1, an, 5).clearContent();
+    if (out.length) as.getRange(2, 1, out.length, 5).setValues(out);
+    if (an > out.length) as.getRange(2 + out.length, 5, an - out.length, 1).setValue(false);
+  }
+  // Бюджет: суммируем план одноимённых статей
+  const bs = ss.getSheetByName(SH.B), bn = bs.getLastRow() - 1, bc = bs.getLastColumn();
+  if (bn > 0 && bc >= 3) {
+    const v = bs.getRange(2, 1, bn, bc).getValues(), idx = {}, out = [];
+    v.forEach(r => {
+      const name = String(r[1]).trim(), type = r[2];
+      if (!name) return;
+      const k = type + '|' + name.toLowerCase();
+      if (idx[k] === undefined) { idx[k] = out.length; out.push([G, name, type].concat(r.slice(3).map(x => Number(x) || 0))); }
+      else { const o = out[idx[k]]; for (let i = 3; i < bc; i++) o[i] += Number(r[i]) || 0; }
+    });
+    bs.getRange(2, 1, bn, bc).clearContent();
+    if (out.length) bs.getRange(2, 1, out.length, bc).setValues(out);
+    if (bn > out.length) bs.deleteRows(2 + out.length, bn - out.length);
+  }
+  // Журнал: группа у всех доходов/расходов
+  const js = ss.getSheetByName(SH.J), jn = js.getLastRow() - 1;
+  if (jn > 0) {
+    const rg = js.getRange(2, 7, jn, 2), v = rg.getValues();
+    v.forEach(r => { if (String(r[1]).trim()) r[0] = G; });
+    rg.setValues(v);
+  }
+  // Доступ: «Группа по умолчанию» больше не нужна; «Общие» у кошельков — убираем
+  const acc = ss.getSheetByName(SH.ACC), cn = acc.getLastRow() - 1;
+  if (cn > 0) acc.getRange(2, 4, cn, 1).clearContent();
+  const ws = ss.getSheetByName(SH.WAL), wn = ws.getLastRow() - 1;
+  if (wn > 0) { const rg = ws.getRange(2, 2, wn, 1), v = rg.getValues(); v.forEach(r => { if (/^общ/i.test(String(r[0]))) r[0] = ''; }); rg.setValues(v); }
+  rebuildReports(true);
+}
+
 function addArticle_(ss, p) {
   const x = p.article || {};
-  const group = String(x.group || '').trim().slice(0, 40), name = String(x.name || '').trim().slice(0, 60);
+  const groups0 = uniq_(readArticles_(ss).map(a => a.group));
+  const group = String(x.group || (groups0.length === 1 ? groups0[0] : ONE_GROUP)).trim().slice(0, 40), name = String(x.name || '').trim().slice(0, 60);
   if (!group || !name) throw new Error('Укажите группу и название статьи');
   if (x.type !== 'Доход' && x.type !== 'Расход') throw new Error('Неверный тип статьи');
   if (readArticles_(ss).some(a => a.group.toLowerCase() === group.toLowerCase() && a.name.toLowerCase() === name.toLowerCase()))
