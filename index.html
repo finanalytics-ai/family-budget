@@ -249,6 +249,11 @@ details[open] .disc{transform:rotate(90deg)}
 .ptbl th{font-weight:600;font-size:11.5px;color:var(--text2);vertical-align:bottom;line-height:1.25;white-space:normal;min-width:76px}
 .ptbl th:first-child,.ptbl td:first-child{position:sticky;left:0;z-index:1;background:var(--pbg);text-align:left;max-width:150px;min-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:1px 0 0 var(--sep)}
 .ptbl td.z{color:var(--text3)}
+.ptbl td.dr{cursor:pointer;text-decoration:underline dotted color-mix(in srgb,var(--text2) 45%,transparent);text-underline-offset:3px}
+.ptbl td.dr:active{background:color-mix(in srgb,var(--glass2) 90%,transparent)}
+.search .sx{flex:0 0 auto;width:22px;height:22px;border-radius:11px;border:0;background:color-mix(in srgb,var(--text3) 35%,transparent);color:var(--text);font-size:11px;line-height:22px;padding:0;cursor:pointer}
+.found{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:12px 4px 0;font-size:13px;color:var(--text2)}
+.found b{font-weight:600;color:var(--text)} .found b.pos{color:var(--pos)}
 .ptbl tr.sec td{background:transparent;box-shadow:none;position:static;font-weight:600;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);padding-top:14px}
 .ptbl tr.tot td{font-weight:600}
 .ptbl tr.big td{font-weight:700;font-size:13.5px;border-bottom:0}
@@ -330,7 +335,7 @@ code{background:var(--glass2);padding:3px 9px;border-radius:8px;font:600 16px ui
   <div class="pages" id="pages">
     <div class="page mesh-in grain" id="pMain">
       <div class="sh-nav" id="shNav">
-        <button class="gbtn gl" data-act="close" aria-label="Закрыть"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l10 10M13 3 3 13"/></svg></button>
+        <button class="gbtn gl" id="shX" data-act="close" aria-label="Закрыть"></button>
         <div class="status gl"><i class="dot"></i><span id="shTitle"></span></div>
         <button class="gbtn gl hide" id="shDel" data-act="delete" aria-label="Удалить"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4"/></svg></button>
       </div>
@@ -357,7 +362,7 @@ const qs = new URLSearchParams(location.search);
 const LS = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
 let API = qs.get('api'), API_SRC = 'ссылка кнопки';
 if (API) LS.set('fb_api', API); else { API = LS.get('fb_api'); API_SRC = 'память телефона'; }
-const APP_BUILD = '2026-11-17.2';
+const APP_BUILD = '2026-11-17.3';
 const DEMO = qs.has('demo');
 
 const $ = s => document.querySelector(s);
@@ -513,7 +518,9 @@ function render(){
   setSync(S.busy);
   document.querySelectorAll('#tabs button').forEach(t => t.classList.toggle('on', t.dataset.v===S.tab));
   $('#dAmt').textContent = money(sum(Object.values(balances())));
+  const ae = document.activeElement, keep = ae && ae.id==='opsQ' ? ae.selectionStart : null;
   $('#view').innerHTML = S.tab==='home' ? viewHome() : S.tab==='ops' ? viewOps() : S.tab==='pf' ? viewPF() : viewOdds();
+  if (keep!==null && $('#opsQ')){ const i = $('#opsQ'); i.focus(); try{ i.setSelectionRange(keep, keep); }catch(e){} }
 }
 function setSync(on){
   const d = $('#sdot'); if (d) d.classList.toggle('busy', !!on);
@@ -585,23 +592,47 @@ function viewHome(){
 }
 
 function viewOps(){
-  let ops = opsOfMonth(S.month);
+  const f = S.opsFilter, w = S.opsWallet || '', q = S.opsQ || '';
+  const wl = D.wallets.filter(x=>x.active || D.ops.some(o=>o.wallet===x.name||o.wallet2===x.name));
+  const seg = `<div class="seg gl">${[['all','Все'],['Расход','Расходы'],['Доход','Доходы'],['Перевод','Переводы']].map(([v,l])=>`<button class="${f===v?'on':''}" data-act="opsf" data-v="${v}">${l}</button>`).join('')}</div>`;
+  const search = `<div class="search gl"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg><input id="opsQ" type="text" enterkeyhint="search" placeholder="Статья, контрагент, комментарий, сумма…" autocomplete="off" value="${esc(q)}"><button class="sx" id="opsX" data-act="opsq-clear" aria-label="Очистить" ${q?'':'hidden'}>✕</button></div>`;
+  const chips = wl.length>1 ? `<div class="fchips"><button class="chip gl ${!w?'on':''}" data-act="opsw" data-v="">Все кошельки</button>${wl.map(x=>`<button class="chip gl ${w===x.name?'on':''}" data-act="opsw" data-v="${esc(x.name)}">${esc(x.icon||'💳')} ${esc(x.name)}</button>`).join('')}</div>` : '';
+  return seg + search + chips + `<div id="opsRes">${opsResults()}</div>`;
+}
+// Поиск: все слова запроса должны встретиться в статье, контрагенте, комментарии, кошельке, плательщике, сумме или дате
+const norm = x => String(x==null?'':x).toLowerCase().replace(/ё/g,'е');
+function opHay(o){
+  return norm([o.article, oneGroup() ? '' : o.group, o.cp, o.comment, o.wallet, o.wallet2, o.type==='Перевод' ? 'перевод' : payerOf(o), o.author, o.type,
+    String(o.amount), String(Math.round(o.amount)), nf.format(Math.round(o.amount)).replace(/\s/g,''), dLabel(o.date), o.date].join(' ¦ '));
+}
+function opsResults(){
   const f = S.opsFilter, w = S.opsWallet || '';
+  const q = norm(S.opsQ).trim(), toks = q.split(/\s+/).filter(Boolean).map(t => t.replace(/\s/g,''));
+  const all = !!q && S.opsScope !== 'month';
+  let ops = all ? D.ops : opsOfMonth(S.month);
   if (f!=='all') ops = ops.filter(o=>o.type===f);
   if (w) ops = ops.filter(o=>o.wallet===w || o.wallet2===w);
-  const wl = D.wallets.filter(x=>x.active || opsOfMonth(S.month).some(o=>o.wallet===x.name||o.wallet2===x.name));
-  const seg = `<div class="seg gl">${[['all','Все'],['Расход','Расходы'],['Доход','Доходы'],['Перевод','Переводы']].map(([v,l])=>`<button class="${f===v?'on':''}" data-act="opsf" data-v="${v}">${l}</button>`).join('')}</div>` +
-    (wl.length>1 ? `<div class="fchips"><button class="chip gl ${!w?'on':''}" data-act="opsw" data-v="">Все кошельки</button>${wl.map(x=>`<button class="chip gl ${w===x.name?'on':''}" data-act="opsw" data-v="${esc(x.name)}">${esc(x.icon||'💳')} ${esc(x.name)}</button>`).join('')}</div>` : '');
-  if (!ops.length) return seg + `<div class="empty">Нет операций за ${esc(mLabel(S.month))}</div>`;
-  const byDay = {};
+  if (toks.length) ops = ops.filter(o => { const h = opHay(o); return toks.every(t => h.indexOf(t)>=0); });
+  const scope = q ? `<div class="fchips"><button class="chip gl ${all?'':'on'}" data-act="opsscope" data-v="month">За ${esc(mLabel(S.month))}</button><button class="chip gl ${all?'on':''}" data-act="opsscope" data-v="all">За всё время</button></div>` : '';
+  if (!ops.length) return scope + `<div class="empty">${q ? 'Ничего не найдено' + (all ? '' : '. Попробуйте «За всё время»') : 'Нет операций за ' + esc(mLabel(S.month))}</div>`;
+  let head = '';
+  if (q || w || f!=='all'){
+    const inc = sum(ops.filter(o=>o.type==='Доход'), o=>o.amount), exp = sum(ops.filter(o=>o.type==='Расход'), o=>o.amount);
+    head = `<div class="found"><span>${q ? 'Найдено' : 'Показано'} ${ops.length} ${plural(ops.length,'операция','операции','операций')}</span><span class="num">${exp ? '<b>'+money(-exp)+'</b>' : ''}${inc && exp ? ' · ' : ''}${inc ? '<b class="pos">'+money(inc,true)+'</b>' : ''}</span></div>`;
+  }
+  const byDay = {}, yr = today().slice(0,4);
   sortOps(ops).forEach(o => (byDay[o.date] = byDay[o.date] || []).push(o));
-  return seg + Object.keys(byDay).map(d => {
+  return scope + head + Object.keys(byDay).map(d => {
     const list = byDay[d];
     const dt = new Date(+d.slice(0,4), +d.slice(5,7)-1, +d.slice(8,10));
     const net = sum(list, o => o.type==='Доход' ? o.amount : o.type==='Расход' ? -o.amount : 0);
-    const lbl = dLabel(d) + (d===today()||d===yesterday() ? '' : ', '+WD[dt.getDay()]);
+    const lbl = dLabel(d) + (d.slice(0,4)!==yr ? ' ' + d.slice(0,4) : '') + (d===today()||d===yesterday() ? '' : ', '+WD[dt.getDay()]);
     return `<div class="dayh"><span>${lbl}</span><span class="num">${net ? money(net,true) : ''}</span></div><div class="list gl">${list.map(o=>opRow(o,true)).join('')}</div>`;
   }).join('');
+}
+function updOpsSearch(){
+  const r = $('#opsRes'); if (r) r.innerHTML = opsResults();
+  const x = $('#opsX'); if (x) x.hidden = !S.opsQ;
 }
 
 function viewPF(){
@@ -701,16 +732,17 @@ function pivotBlock(from, to){
   const names = W.map(x => x.w.name);
   const n0 = v => Math.round(v);
   const fmt = v => n0(v) ? nf.format(n0(v)) : '—';
-  const td = (v, cls) => `<td class="${(cls||'') + (n0(v) ? '' : ' z')}">${fmt(v)}</td>`;
+  const td = (v, cls, dr) => `<td class="${(cls||'') + (n0(v) ? (dr ? ' dr' : '') : ' z')}"${n0(v) && dr ? ` data-act="drill" ${dr}` : ''}>${fmt(v)}</td>`;
+  const da = (t, k, w) => `data-t="${esc(t)}" data-k="${esc(k||'')}" data-w="${esc(w||'')}"`;
   const label = k => { const [g,a] = k.split('|'); return esc(artIcon(g,a)) + '&ensp;' + esc(a) + (oneGroup() ? '' : ` <span style="opacity:.55">· ${esc(g)}</span>`); };
-  const rowOf = (lbl, vals, cls) => `<tr class="${cls||''}"><td>${lbl}</td>${vals.map(v=>td(v)).join('')}${td(sum(vals),'sum')}</tr>`;
+  const rowOf = (lbl, vals, cls, t, k) => `<tr class="${cls||''}"><td>${lbl}</td>${vals.map((v,i)=>td(v, '', t ? da(t, k, names[i]) : '')).join('')}${td(sum(vals),'sum', t && t!=='Перевод' ? da(t, k, '') : '')}</tr>`;
   const section = (type, title) => {
     const t = cell[type];
     const keys = Object.keys(t).sort((a,b) => sum(Object.values(t[b])) - sum(Object.values(t[a])));
     const head = `<tr class="sec"><td colspan="${names.length+2}">${title}</td></tr>`;
     if (!keys.length) return head + `<tr><td class="z">нет операций</td>${names.map(()=>'<td class="z">—</td>').join('')}<td class="sum z">—</td></tr>`;
     return head +
-      keys.map(k => rowOf(label(k), names.map(w => t[k][w] || 0))).join('');
+      keys.map(k => rowOf(label(k), names.map(w => t[k][w] || 0), '', type, k)).join('');
   };
   const trNet = W.map(x => x.tin - x.tout);
   return sec('Сводная по кошелькам', `<span class="v">${esc(periodLabel())}</span>`) + `
@@ -718,14 +750,14 @@ function pivotBlock(from, to){
     <tr><th>Статья</th>${W.map(x=>`<th>${esc(x.w.icon||'💳')}<br>${esc(x.w.name)}</th>`).join('')}<th class="sum">Итого</th></tr>
     ${rowOf('Остаток на начало', W.map(x=>x.start), 'tot')}
     ${section('Доход', 'Поступления')}
-    ${rowOf('Итого поступления', W.map(x=>x.inc), 'tot')}
+    ${rowOf('Итого поступления', W.map(x=>x.inc), 'tot', 'Доход')}
     ${section('Расход', 'Выбытия')}
-    ${rowOf('Итого выбытия', W.map(x=>x.exp), 'tot')}
-    ${trNet.some(v=>Math.round(v)) ? rowOf('Переводы (сальдо)', trNet) : ''}
+    ${rowOf('Итого выбытия', W.map(x=>x.exp), 'tot', 'Расход')}
+    ${trNet.some(v=>Math.round(v)) ? rowOf('Переводы (сальдо)', trNet, '', 'Перевод') : ''}
     ${rowOf('Чистый поток', W.map(x=>x.inc - x.exp + x.tin - x.tout), 'tot')}
     ${rowOf('Остаток на конец', W.map(x=>x.end), 'big')}
   </table></div></div>
-  <div class="gf">Листайте таблицу вбок, чтобы увидеть все кошельки. Переводы между своими кошельками в итог «Итого» не влияют.</div>`;
+  <div class="gf">Нажмите на сумму — откроется список операций. Листайте таблицу вбок, чтобы увидеть все кошельки. Переводы между своими кошельками в итог «Итого» не влияют.</div>`;
 }
 function walletBlock(from, to){
   const list = walletOdds(from, to);
@@ -861,9 +893,41 @@ function updReport(){
 }
 function groupIcon(g){ return /общ/i.test(g) ? '👪' : /люс|жен|мам/i.test(g) ? '👩' : /кир|муж|пап/i.test(g) ? '👨' : '👤'; }
 
+/* расшифровка ячейки сводной: операции по статье и кошельку */
+function openDrill(d){
+  S.drill = d; mode = 'drill';
+  const [g, a] = (d.k || '|').split('|');
+  const tr = d.t==='Перевод';
+  const ops = sortOps(D.ops.filter(o => {
+    const mk = o.date.slice(0,7); if (mk < d.from || mk > d.to || o.type!==d.t) return false;
+    if (tr) return o.wallet===d.w || o.wallet2===d.w;
+    if (d.k && akey(o.group, o.article)!==d.k) return false;
+    return !d.w || o.wallet===d.w;
+  }));
+  const total = tr ? sum(ops, o => o.wallet2===d.w ? o.amount : -o.amount) : sum(ops, o => o.amount);
+  const what = tr ? 'Переводы' : d.k ? a : (d.t==='Доход' ? 'Все поступления' : 'Все выбытия');
+  const wal = d.w ? (walOf(d.w) || {}) : null;
+  const per = d.from===d.to ? mLabel(d.from) : mShort(d.from)+' — '+mShort(d.to);
+  const dates = uniq(ops.map(o=>o.date));
+  openSheet(what, 'Назад к сводной', `
+    <div class="hero2">
+      <div class="k">${esc(tr ? '' : d.k ? artIcon(g, a)+' ' : '')}${esc(what)} · ${wal ? esc((wal.icon||'💳')+' '+d.w) : 'все кошельки'}</div>
+      <div class="v">${tr ? money(total, true) : money(total)}</div>
+      <div class="d">${esc(per)} · ${ops.length} ${plural(ops.length,'операция','операции','операций')}</div>
+    </div>
+    ${ops.length ? dates.map(dt => `<div class="dayh"><span>${esc(dLabel(dt))}</span></div><div class="list gl">${ops.filter(o=>o.date===dt).map(o=>opRow(o,true)).join('')}</div>`).join('') : '<div class="empty">Операций нет</div>'}
+    <div class="gf" style="margin-top:14px">Нажмите на операцию, чтобы изменить её. Стрелка «назад» вернёт к этому списку.</div>`);
+  $('#shDone').disabled = false;
+}
+
 /* окно */
+const ICO_X = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l10 10M13 3 3 13"/></svg>';
+const ICO_BACK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 4.5 8l5.5 5.5"/></svg>';
 function openSheet(title, done, body, canDelete){
   $('#pages').classList.remove('push');
+  const toList = S.drill && mode!=='drill';
+  $('#shX').innerHTML = toList ? ICO_BACK : ICO_X;
+  $('#shX').setAttribute('aria-label', toList ? 'Назад к списку' : 'Закрыть');
   $('#shTitle').textContent = title;
   $('#shDone').textContent = done;
   $('#shDel').classList.toggle('hide', !canDelete);
@@ -876,6 +940,9 @@ function openSheet(title, done, body, canDelete){
   if (tg && tg.BackButton) tg.BackButton.show();
 }
 function closeSheet(){
+  // операция открыта из расшифровки сводной — возвращаемся к списку
+  if (S.drill && mode!=='drill'){ F = null; openDrill(S.drill); return; }
+  if (mode==='drill') S.drill = null;
   F = null; mode = null;
   $('#sheet').classList.remove('on');
   $('#sheet').style.transform = '';
@@ -1374,10 +1441,10 @@ async function copyPlan(){
 /* общее */
 async function busy(fn){
   if (S.saving) return;
-  S.saving = true; const b = $('#shDone'); b.disabled = true; const txt = b.textContent; b.textContent = 'Сохраняю…';
+  S.saving = true; const b = $('#shDone'); b.disabled = true; const txt = b.textContent, m0 = mode; b.textContent = 'Сохраняю…';
   try { await fn(); }
   catch(e){ haptic('error'); hud(e.message || 'Не удалось сохранить'); }
-  finally { S.saving = false; b.textContent = txt; b.disabled = false; if (mode==='op') updInfo(); if (mode==='plan') updPlan(); refreshArt(); }
+  finally { S.saving = false; if (mode===m0 || b.textContent==='Сохраняю…') b.textContent = txt; b.disabled = false; if (mode==='op') updInfo(); if (mode==='plan') updPlan(); refreshArt(); }
 }
 function fail(msg, focus){ haptic('error'); hud(msg); if (focus){ const el=$(focus); if (el) el.focus(); } }
 function ask(msg){
@@ -1390,6 +1457,12 @@ function haptic(kind){ try{ if (!inTg || !tg.HapticFeedback) return; if (kind) t
 let hudT;
 function hud(msg){ const t=$('#hud'); t.textContent = msg; t.classList.add('on'); clearTimeout(hudT); hudT = setTimeout(()=>t.classList.remove('on'), 2000); }
 
+document.addEventListener('input', e => {
+  if (e.target.id==='opsQ'){ S.opsQ = e.target.value; updOpsSearch(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.target.id==='opsQ' && e.key==='Enter') e.target.blur();
+});
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el || el.disabled) return;
@@ -1399,6 +1472,9 @@ document.addEventListener('click', e => {
     case 'month': S.month = mAdd(S.month, +v); render(); haptic(); break;
     case 'opsf': S.opsFilter = v; render(); haptic(); break;
     case 'opsw': S.opsWallet = v; render(); haptic(); break;
+    case 'opsscope': S.opsScope = v; updOpsSearch(); haptic(); break;
+    case 'opsq-clear': S.opsQ = ''; { const i = $('#opsQ'); if (i){ i.value = ''; i.focus(); } } updOpsSearch(); haptic(); break;
+    case 'drill': { const [from, to] = oddsRange(); haptic(); openDrill({ t: el.dataset.t, k: el.dataset.k, w: el.dataset.w, from, to }); break; }
     case 'oddsby': S.oddsBy = v; render(); haptic(); break;
     case 'report': openReport(); break;
     case 'repby': S.repBy = v; updReport(); haptic(); break;
@@ -1411,7 +1487,7 @@ document.addEventListener('click', e => {
     case 'wallet-new': openWallet(null, mode==='op'); break;
     case 'close': closeSheet(); break;
     case 'back': popPage(); break;
-    case 'done': if (mode==='op') saveOp(); else if (mode==='wallet') saveWallet(); else if (mode==='plan') savePlan(); else if (mode==='art') saveArt(); else if (mode==='artEdit') saveArtEdit(); else if (mode==='hidden' || mode==='report') closeSheet(); break;
+    case 'done': if (mode==='op') saveOp(); else if (mode==='wallet') saveWallet(); else if (mode==='plan') savePlan(); else if (mode==='art') saveArt(); else if (mode==='artEdit') saveArtEdit(); else if (mode==='hidden' || mode==='report' || mode==='drill') closeSheet(); break;
     case 'plan': openPlan(el.dataset.g, v); break;
     case 'pscope': F.scope = v; updPlan(); haptic(); break;
     case 'art-new': openArtNew(); break;
