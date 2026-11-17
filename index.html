@@ -242,6 +242,17 @@ details[open] .disc{transform:rotate(90deg)}
 .fchips{display:flex;gap:6px;overflow-x:auto;margin:10px -18px 0;padding:0 18px;scrollbar-width:none}
 .fchips::-webkit-scrollbar{display:none}
 .fchips .chip{height:32px;font-size:13px;padding:0 12px}
+:root{--pbg:#DCE6F2} [data-theme=dark]{--pbg:#17233A}
+.ptbl{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:18px}
+.ptbl table{border-collapse:separate;border-spacing:0;font-size:12.5px;font-variant-numeric:tabular-nums;min-width:100%}
+.ptbl th,.ptbl td{padding:8px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--sep)}
+.ptbl th{font-weight:600;font-size:11.5px;color:var(--text2);vertical-align:bottom;line-height:1.25;white-space:normal;min-width:76px}
+.ptbl th:first-child,.ptbl td:first-child{position:sticky;left:0;z-index:1;background:var(--pbg);text-align:left;max-width:150px;min-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:1px 0 0 var(--sep)}
+.ptbl td.z{color:var(--text3)}
+.ptbl tr.sec td{background:transparent;box-shadow:none;position:static;font-weight:600;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);padding-top:14px}
+.ptbl tr.tot td{font-weight:600}
+.ptbl tr.big td{font-weight:700;font-size:13.5px;border-bottom:0}
+.ptbl td.sum,.ptbl th.sum{background:color-mix(in srgb,var(--glass2) 60%,transparent)}
 .pchips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto;padding:8px 0}
 .pchips .chip{height:30px;font-size:13.5px;padding:0 12px;background:var(--glass2)}
 .pchips .chip.on{background:var(--accent);color:var(--on-accent)}
@@ -346,7 +357,7 @@ const qs = new URLSearchParams(location.search);
 const LS = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
 let API = qs.get('api'), API_SRC = 'ссылка кнопки';
 if (API) LS.set('fb_api', API); else { API = LS.get('fb_api'); API_SRC = 'память телефона'; }
-const APP_BUILD = '2026-11-17.1';
+const APP_BUILD = '2026-11-17.2';
 const DEMO = qs.has('demo');
 
 const $ = s => document.querySelector(s);
@@ -630,7 +641,7 @@ function viewOdds(){
   const r = odds(from,to);
   const by = S.oddsBy || 'art';
   const seg = `<div class="seg gl">${[['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].map(([v,l])=>`<button class="${S.odds===v?'on':''}" data-act="odds" data-v="${v}">${l}</button>`).join('')}</div>
-    <div class="seg gl" style="margin-top:8px">${[['art','По статьям'],['wal','По кошелькам']].map(([v,l])=>`<button class="${by===v?'on':''}" data-act="oddsby" data-v="${v}">${l}</button>`).join('')}</div>`;
+    <div class="seg gl" style="margin-top:8px">${[['art','По статьям'],['wal','По кошелькам'],['pivot','Сводная']].map(([v,l])=>`<button class="${by===v?'on':''}" data-act="oddsby" data-v="${v}">${l}</button>`).join('')}</div>`;
   const block = list => list.length && oneGroup() ? '<div class="list gl">' + list.flatMap(g => g.items.map(i => ({ g:g.group, a:i.a, v:i.v }))).sort((x,y)=>y.v-x.v).map(i =>
       `<div class="row"><span class="ico">${esc(artIcon(i.g,i.a))}</span><span class="m"><div class="t"><span class="n">${esc(i.a)}</span></div></span><span class="a"><b>${money(i.v)}</b></span></div>`).join('') + '</div>'
     : list.length ? '<div class="list gl">' + list.map(g => `<details><summary class="row tap"><span class="ico">${esc(groupIcon(g.group))}</span><span class="m"><div class="t"><span class="n">${esc(g.group)}</span></div><div class="s">${g.items.length} ${plural(g.items.length,'статья','статьи','статей')}</div></span><span class="a"><b>${money(g.total)}</b></span>${DISC}</summary>
@@ -644,7 +655,7 @@ function viewOdds(){
     <div class="kv"><span class="t2">Чистый поток</span><b class="${r.net<0?'neg':''}">${money(r.net,true)}</b></div>
     <div class="kv" style="border-top:1px solid var(--sep);margin-top:6px;padding-top:12px"><span style="font-weight:500">Остаток на конец</span><b style="font-size:22px;font-weight:300;letter-spacing:-.03em">${money(r.end)}</b></div>
   </div>
-  ` + (by==='wal' ? walletBlock(from, to) : `
+  ` + (by==='pivot' ? pivotBlock(from, to) : by==='wal' ? walletBlock(from, to) : `
   ${sec('Поступления', `<span class="v num">${money(r.tIn)}</span>`)}${block(r.inL)}
   ${sec('Выбытия', `<span class="v num">${money(r.tEx)}</span>`)}${block(r.exL)}`);
   if (r.months.length > 1){
@@ -675,6 +686,46 @@ function walletOdds(from, to){
   });
   return Object.values(W).map(x => ({ ...x, end: x.start + x.inc - x.exp + x.tin - x.tout }))
     .filter(x => x.w.active!==false || x.inc || x.exp || x.tin || x.tout || Math.abs(x.end)>0.004);
+}
+// Сводная таблица ОДДС: строки — статьи, столбцы — кошельки, итоги по каждому кошельку
+function pivotBlock(from, to){
+  const W = walletOdds(from, to);
+  if (!W.length) return '<div class="empty">Кошельков нет</div>';
+  const cell = { 'Доход':{}, 'Расход':{} };
+  D.ops.forEach(o => {
+    if (o.type==='Перевод') return;
+    const mk = o.date.slice(0,7); if (mk < from || mk > to) return;
+    const k = akey(o.group, o.article), t = cell[o.type];
+    (t[k] = t[k] || {})[o.wallet] = (t[k][o.wallet] || 0) + o.amount;
+  });
+  const names = W.map(x => x.w.name);
+  const n0 = v => Math.round(v);
+  const fmt = v => n0(v) ? nf.format(n0(v)) : '—';
+  const td = (v, cls) => `<td class="${(cls||'') + (n0(v) ? '' : ' z')}">${fmt(v)}</td>`;
+  const label = k => { const [g,a] = k.split('|'); return esc(artIcon(g,a)) + '&ensp;' + esc(a) + (oneGroup() ? '' : ` <span style="opacity:.55">· ${esc(g)}</span>`); };
+  const rowOf = (lbl, vals, cls) => `<tr class="${cls||''}"><td>${lbl}</td>${vals.map(v=>td(v)).join('')}${td(sum(vals),'sum')}</tr>`;
+  const section = (type, title) => {
+    const t = cell[type];
+    const keys = Object.keys(t).sort((a,b) => sum(Object.values(t[b])) - sum(Object.values(t[a])));
+    const head = `<tr class="sec"><td colspan="${names.length+2}">${title}</td></tr>`;
+    if (!keys.length) return head + `<tr><td class="z">нет операций</td>${names.map(()=>'<td class="z">—</td>').join('')}<td class="sum z">—</td></tr>`;
+    return head +
+      keys.map(k => rowOf(label(k), names.map(w => t[k][w] || 0))).join('');
+  };
+  const trNet = W.map(x => x.tin - x.tout);
+  return sec('Сводная по кошелькам', `<span class="v">${esc(periodLabel())}</span>`) + `
+  <div class="panel gl" style="padding:0;overflow:hidden"><div class="ptbl"><table>
+    <tr><th>Статья</th>${W.map(x=>`<th>${esc(x.w.icon||'💳')}<br>${esc(x.w.name)}</th>`).join('')}<th class="sum">Итого</th></tr>
+    ${rowOf('Остаток на начало', W.map(x=>x.start), 'tot')}
+    ${section('Доход', 'Поступления')}
+    ${rowOf('Итого поступления', W.map(x=>x.inc), 'tot')}
+    ${section('Расход', 'Выбытия')}
+    ${rowOf('Итого выбытия', W.map(x=>x.exp), 'tot')}
+    ${trNet.some(v=>Math.round(v)) ? rowOf('Переводы (сальдо)', trNet) : ''}
+    ${rowOf('Чистый поток', W.map(x=>x.inc - x.exp + x.tin - x.tout), 'tot')}
+    ${rowOf('Остаток на конец', W.map(x=>x.end), 'big')}
+  </table></div></div>
+  <div class="gf">Листайте таблицу вбок, чтобы увидеть все кошельки. Переводы между своими кошельками в итог «Итого» не влияют.</div>`;
 }
 function walletBlock(from, to){
   const list = walletOdds(from, to);
